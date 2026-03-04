@@ -305,12 +305,13 @@ function showToast(msg, type='success'){
 }
 
 function escapeHTML(str) {
+  // 使用相容性較好的寫法，避免舊版或內建瀏覽器不支援 replaceAll
   return String(str)
-    .replaceAll('&','&amp;')
-    .replaceAll('<','&lt;')
-    .replaceAll('>','&gt;')
-    .replaceAll('"','&quot;')
-    .replaceAll("'","&#039;");
+    .replace(/&/g,'&amp;')
+    .replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;')
+    .replace(/'/g,'&#039;');
 }
 
 /* ======= Modal ======= */
