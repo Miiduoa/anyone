@@ -75,7 +75,7 @@ function readSettings() {
       storyStyle: 'metal',
       storyImageX: 0,
       storyImageY: 0,
-      storyImageScale: 1
+      storyImageScale: 1.1
     },
     avatarDataUrl: null
   };
@@ -509,7 +509,10 @@ app.patch('/api/settings', (req, res) => {
     if (typeof p.cta2 === 'string') safe.promoSettings.cta2 = p.cta2.slice(0, 60);
     if (typeof p.hint === 'string') safe.promoSettings.hint = p.hint.slice(0, 200);
     if (typeof p.storyStyle === 'string') {
-      safe.promoSettings.storyStyle = ['metal', 'glass'].includes(p.storyStyle) ? p.storyStyle : 'metal';
+      const rawStyle = p.storyStyle === 'glass' ? 'glass_frost' : p.storyStyle;
+      safe.promoSettings.storyStyle = ['metal', 'glass_frost', 'glass_clear'].includes(rawStyle)
+        ? rawStyle
+        : 'metal';
     }
     if (typeof p.storyImageX === 'number' && Number.isFinite(p.storyImageX)) {
       safe.promoSettings.storyImageX = Math.max(-260, Math.min(260, p.storyImageX));
@@ -518,7 +521,7 @@ app.patch('/api/settings', (req, res) => {
       safe.promoSettings.storyImageY = Math.max(-260, Math.min(260, p.storyImageY));
     }
     if (typeof p.storyImageScale === 'number' && Number.isFinite(p.storyImageScale)) {
-      safe.promoSettings.storyImageScale = Math.max(0.6, Math.min(2.2, p.storyImageScale));
+      safe.promoSettings.storyImageScale = Math.max(1, Math.min(2.6, p.storyImageScale));
     }
   }
 

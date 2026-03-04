@@ -63,7 +63,7 @@ let promoSettings = {
   storyStyle: "metal",
   storyImageX: 0,
   storyImageY: 0,
-  storyImageScale: 1
+  storyImageScale: 1.1
 };
 
 let serverAvatarDataUrl = null;
@@ -577,21 +577,41 @@ function getStoryImageState(){
   return {
     x: clamp(Number(promoSettings.storyImageX || 0), -260, 260),
     y: clamp(Number(promoSettings.storyImageY || 0), -260, 260),
-    scale: clamp(Number(promoSettings.storyImageScale || 1), 0.6, 2.2)
+    scale: clamp(Number(promoSettings.storyImageScale || 1.1), 1, 2.6)
   };
 }
 
 function setStoryStyle(style){
-  promoSettings.storyStyle = style === 'glass' ? 'glass' : 'metal';
+  promoSettings.storyStyle = ['metal', 'glass_frost', 'glass_clear'].includes(style) ? style : 'metal';
   const metalBtn = document.getElementById('story-style-metal');
-  const glassBtn = document.getElementById('story-style-glass');
+  const glassFrostBtn = document.getElementById('story-style-glass-frost');
+  const glassClearBtn = document.getElementById('story-style-glass-clear');
   if (metalBtn) metalBtn.style.opacity = promoSettings.storyStyle === 'metal' ? '1' : '0.7';
-  if (glassBtn) glassBtn.style.opacity = promoSettings.storyStyle === 'glass' ? '1' : '0.7';
+  if (glassFrostBtn) glassFrostBtn.style.opacity = promoSettings.storyStyle === 'glass_frost' ? '1' : '0.7';
+  if (glassClearBtn) glassClearBtn.style.opacity = promoSettings.storyStyle === 'glass_clear' ? '1' : '0.7';
   const liveCard = document.getElementById('story-live-card');
   if (liveCard) {
     liveCard.classList.toggle('metal', promoSettings.storyStyle === 'metal');
-    liveCard.classList.toggle('glass', promoSettings.storyStyle === 'glass');
+    liveCard.classList.toggle('glass-frost', promoSettings.storyStyle === 'glass_frost');
+    liveCard.classList.toggle('glass-clear', promoSettings.storyStyle === 'glass_clear');
   }
+}
+
+function applyStoryImageTransform(){
+  const img = document.getElementById('story-image-editor-photo');
+  const viewport = document.getElementById('story-image-viewport');
+  if (!img || !viewport) return;
+  const s = getStoryImageState();
+  const vw = viewport.clientWidth || 1;
+  const vh = viewport.clientHeight || 1;
+  const maxX = Math.max(0, (vw * s.scale - vw) / 2);
+  const maxY = Math.max(0, (vh * s.scale - vh) / 2);
+  const finalX = clamp(s.x, -maxX, maxX);
+  const finalY = clamp(s.y, -maxY, maxY);
+  promoSettings.storyImageX = finalX;
+  promoSettings.storyImageY = finalY;
+  promoSettings.storyImageScale = s.scale;
+  img.style.transform = `translate(calc(-50% + ${finalX}px), calc(-50% + ${finalY}px)) scale(${s.scale})`;
 }
 
 function syncStoryImageControls(){
@@ -614,10 +634,7 @@ function syncStoryImageControls(){
   if (yv) yv.textContent = String(Math.round(s.y));
   if (scv) scv.textContent = `${s.scale.toFixed(2)}x`;
 
-  const img = document.getElementById('story-image-editor-photo');
-  if (img) {
-    img.style.transform = `translate(calc(-50% + ${s.x}px), calc(-50% + ${s.y}px)) scale(${s.scale})`;
-  }
+  applyStoryImageTransform();
 }
 
 function updateStoryLivePreviewText(){
@@ -644,6 +661,7 @@ function initStoryDesignEditor(){
   const sc = document.getElementById('ps_storyImageScale');
   const img = document.getElementById('story-image-editor-photo');
   const editor = document.getElementById('story-image-editor');
+  const viewport = document.getElementById('story-image-viewport');
 
   if (img) {
     if (serverAvatarDataUrl) {
@@ -655,7 +673,7 @@ function initStoryDesignEditor(){
 
   if (x) x.oninput = () => { promoSettings.storyImageX = Number(x.value || 0); syncStoryImageControls(); };
   if (y) y.oninput = () => { promoSettings.storyImageY = Number(y.value || 0); syncStoryImageControls(); };
-  if (sc) sc.oninput = () => { promoSettings.storyImageScale = Number(sc.value || 1); syncStoryImageControls(); };
+  if (sc) sc.oninput = () => { promoSettings.storyImageScale = Number(sc.value || 1.1); syncStoryImageControls(); };
 
   const bindTextSync = (id, key) => {
     const el = document.getElementById(id);
@@ -670,6 +688,12 @@ function initStoryDesignEditor(){
   bindTextSync('ps_siteUrl', 'siteUrl');
   bindTextSync('ps_cta1', 'cta1');
   bindTextSync('ps_cta2', 'cta2');
+
+  if (viewport) {
+    window.addEventListener('resize', () => {
+      syncStoryImageControls();
+    });
+  }
 
   if (!editor) return;
   let dragging = false;
@@ -1438,15 +1462,18 @@ function renderAdminPanel(){
         </div>
 
         <div style="margin-top:12px; padding:12px; border-radius:12px; border:1px solid rgba(255,255,255,0.08); background:rgba(255,255,255,0.02);">
-          <div style="font-size:13px; font-weight:800; margin-bottom:10px;">🎨 名片風格（Metal / Glass）</div>
+          <div style="font-size:13px; font-weight:800; margin-bottom:10px;">🎨 名片風格（信用卡橫式）</div>
           <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px;">
             <button id="story-style-metal" class="action-btn story-style-btn" onclick="setStoryStyle('metal')">🪙 金屬</button>
-            <button id="story-style-glass" class="action-btn story-style-btn" onclick="setStoryStyle('glass')">🧊 玻璃</button>
+            <button id="story-style-glass-frost" class="action-btn story-style-btn" onclick="setStoryStyle('glass_frost')">🧊 毛玻璃</button>
+            <button id="story-style-glass-clear" class="action-btn story-style-btn" onclick="setStoryStyle('glass_clear')">💎 透明玻璃</button>
           </div>
 
-          <div style="font-size:13px; font-weight:800; margin:10px 0 6px;">🖼️ 名片圖片位置（拖移或滑桿）</div>
-          <div id="story-image-editor" style="position:relative; width:100%; max-width:420px; aspect-ratio:9/16; border-radius:14px; overflow:hidden; border:1px solid rgba(255,255,255,0.1); background:linear-gradient(135deg,#151519,#101014); margin-bottom:10px; touch-action:none; cursor:grab;">
-            <div id="story-image-editor-photo" style="position:absolute; left:50%; top:50%; width:180%; height:180%; background-size:cover; background-position:center; transform:translate(-50%,-50%) scale(1);"></div>
+          <div style="font-size:13px; font-weight:800; margin:10px 0 6px;">🖼️ 名片圖片位置（拖移定位，限制在框內）</div>
+          <div id="story-image-editor" style="position:relative; width:100%; max-width:640px; aspect-ratio:1.586; border-radius:18px; overflow:hidden; border:1px solid rgba(255,255,255,0.12); background:linear-gradient(135deg,#151519,#101014); margin-bottom:10px; touch-action:none; cursor:grab;">
+            <div id="story-image-viewport" style="position:absolute; inset:0; overflow:hidden; border-radius:18px;">
+              <div id="story-image-editor-photo" style="position:absolute; left:50%; top:50%; width:100%; height:100%; background-size:cover; background-position:center; transform:translate(-50%,-50%) scale(1.1);"></div>
+            </div>
             <div class="story-editor-shimmer"></div>
             <div id="story-live-card" class="story-live-card metal">
               <div class="story-live-header">
@@ -1469,7 +1496,7 @@ function renderAdminPanel(){
             <label style="font-size:12px; color:var(--color-sub);">垂直位移：<span id="ps_storyImageYVal">0</span></label>
             <input id="ps_storyImageY" type="range" min="-260" max="260" step="1" value="${Number(promoSettings.storyImageY || 0)}" />
             <label style="font-size:12px; color:var(--color-sub);">縮放：<span id="ps_storyImageScaleVal">1.00x</span></label>
-            <input id="ps_storyImageScale" type="range" min="0.6" max="2.2" step="0.01" value="${Number(promoSettings.storyImageScale || 1)}" />
+            <input id="ps_storyImageScale" type="range" min="1" max="2.6" step="0.01" value="${Number(promoSettings.storyImageScale || 1.1)}" />
           </div>
         </div>
 
@@ -1568,10 +1595,10 @@ function updatePromoFromForm(){
     cta1: read("ps_cta1") || promoSettings.cta1,
     cta2: read("ps_cta2") || promoSettings.cta2,
     hint: read("ps_hint") || promoSettings.hint,
-    storyStyle: promoSettings.storyStyle === 'glass' ? 'glass' : 'metal',
+    storyStyle: ['metal', 'glass_frost', 'glass_clear'].includes(promoSettings.storyStyle) ? promoSettings.storyStyle : 'metal',
     storyImageX: clamp(Number(document.getElementById('ps_storyImageX')?.value || promoSettings.storyImageX || 0), -260, 260),
     storyImageY: clamp(Number(document.getElementById('ps_storyImageY')?.value || promoSettings.storyImageY || 0), -260, 260),
-    storyImageScale: clamp(Number(document.getElementById('ps_storyImageScale')?.value || promoSettings.storyImageScale || 1), 0.6, 2.2)
+    storyImageScale: clamp(Number(document.getElementById('ps_storyImageScale')?.value || promoSettings.storyImageScale || 1.1), 1, 2.6)
   };
   savePromoSettings();
   render();
@@ -1823,18 +1850,25 @@ function drawMetalCard(ctx,x,y,w,h,r){
   ctx.fillStyle=g2;
   roundRect(ctx,x+26,y+28,w-52,10,6); ctx.fill();
 }
-function drawGlassCard(ctx,x,y,w,h,r){
-  ctx.fillStyle="rgba(255,255,255,0.08)";
+function drawGlassCard(ctx,x,y,w,h,r,variant){
+  const isClear = variant === 'glass_clear';
+  ctx.fillStyle = isClear ? "rgba(255,255,255,0.05)" : "rgba(255,255,255,0.10)";
   roundRect(ctx,x,y,w,h,r); ctx.fill();
 
   const g = ctx.createLinearGradient(x,y,x+w,y+h);
-  g.addColorStop(0,"rgba(255,255,255,0.25)");
-  g.addColorStop(0.45,"rgba(255,255,255,0.10)");
-  g.addColorStop(1,"rgba(255,255,255,0.04)");
+  if (isClear) {
+    g.addColorStop(0,"rgba(255,255,255,0.18)");
+    g.addColorStop(0.45,"rgba(255,255,255,0.06)");
+    g.addColorStop(1,"rgba(255,255,255,0.02)");
+  } else {
+    g.addColorStop(0,"rgba(255,255,255,0.30)");
+    g.addColorStop(0.45,"rgba(255,255,255,0.14)");
+    g.addColorStop(1,"rgba(255,255,255,0.06)");
+  }
   ctx.fillStyle=g;
   roundRect(ctx,x+2,y+2,w-4,h-4,r-2); ctx.fill();
 
-  ctx.strokeStyle="rgba(255,255,255,0.30)";
+  ctx.strokeStyle = isClear ? "rgba(255,255,255,0.35)" : "rgba(255,255,255,0.42)";
   ctx.lineWidth=2;
   roundRect(ctx,x+1,y+1,w-2,h-2,r-2); ctx.stroke();
 }
@@ -1849,26 +1883,25 @@ async function drawStoryHeroImage(ctx, cardX, cardY, cardW, cardH, settings){
     const x = Number(settings.storyImageX || 0);
     const y = Number(settings.storyImageY || 0);
     const scale = Number(settings.storyImageScale || 1);
-    const zoneX = cardX + cardW - 282;
-    const zoneY = cardY + 78;
-    const zoneW = 210;
-    const zoneH = 210;
 
     ctx.save();
-    roundRect(ctx, zoneX, zoneY, zoneW, zoneH, 28);
+    roundRect(ctx, cardX, cardY, cardW, cardH, 40);
     ctx.clip();
-    const base = Math.max(zoneW, zoneH) * 1.25 * scale;
-    const drawW = base;
-    const drawH = base;
-    const cx = zoneX + zoneW / 2 + x;
-    const cy = zoneY + zoneH / 2 + y;
+    const drawW = cardW * scale;
+    const drawH = cardH * scale;
+    const cx = cardX + cardW / 2 + x;
+    const cy = cardY + cardH / 2 + y;
     ctx.drawImage(img, cx - drawW / 2, cy - drawH / 2, drawW, drawH);
     ctx.restore();
 
-    ctx.strokeStyle = "rgba(255,255,255,0.22)";
-    ctx.lineWidth = 2;
-    roundRect(ctx, zoneX, zoneY, zoneW, zoneH, 28);
-    ctx.stroke();
+    // 黑色柔焦遮罩，確保文字可讀
+    const shade = ctx.createLinearGradient(cardX, cardY, cardX + cardW, cardY + cardH);
+    shade.addColorStop(0, "rgba(0,0,0,0.40)");
+    shade.addColorStop(0.5, "rgba(0,0,0,0.24)");
+    shade.addColorStop(1, "rgba(0,0,0,0.45)");
+    ctx.fillStyle = shade;
+    roundRect(ctx, cardX, cardY, cardW, cardH, 40);
+    ctx.fill();
   } catch (e) {
     console.error(e);
   }
@@ -1898,9 +1931,10 @@ async function generatePromoStoryCanvas(){
   ctx.fillStyle=bg;
   ctx.fillRect(0,0,canvas.width,canvas.height);
 
-  const cardX=110, cardY=520, cardW=860, cardH=560;
-  if ((s.storyStyle || 'metal') === 'glass') {
-    drawGlassCard(ctx, cardX, cardY, cardW, cardH, 40);
+  const cardX=84, cardY=700, cardW=912, cardH=576;
+  const style = s.storyStyle || 'metal';
+  if (style === 'glass_frost' || style === 'glass_clear') {
+    drawGlassCard(ctx, cardX, cardY, cardW, cardH, 40, style);
   } else {
     drawMetalCard(ctx, cardX, cardY, cardW, cardH, 40);
   }
@@ -1909,50 +1943,53 @@ async function generatePromoStoryCanvas(){
   ctx.textAlign="center";
   ctx.fillStyle="rgba(255,255,255,0.94)";
   const name = String(s.displayName||"Miiduoa").slice(0,24);
-  const nameSize = fitText(ctx, name, 860, 72, 46, 900, "Arial");
+  const nameSize = fitText(ctx, name, 900, 64, 38, 900, "Arial");
   ctx.font=`900 ${nameSize}px Arial`;
-  ctx.fillText(name, 540, 280);
-
-  ctx.font="700 28px Arial";
-  ctx.fillStyle="rgba(255,255,255,0.65)";
-  ctx.fillText("想對我說什麼？匿名留言", 540, 340);
-
-  ctx.font="600 28px Arial";
-  ctx.fillStyle="rgba(255,255,255,0.60)";
-  const tagLines = wrapText(ctx, String(s.tagline||""), 860).slice(0,2);
-  tagLines.forEach((ln,idx)=>ctx.fillText(ln, 540, 392 + idx*38));
+  ctx.fillText(name, 540, 350);
 
   ctx.textAlign="left";
-  ctx.fillStyle="rgba(255,255,255,0.92)";
-  ctx.font="900 44px Arial";
-  ctx.fillText(String(s.cta1||"匿名留言給我").slice(0,16), cardX+60, cardY+140);
+  ctx.fillStyle="rgba(255,255,255,0.95)";
+  ctx.font="900 38px Arial";
+  ctx.fillText(String(s.cta1||"匿名留言給我").slice(0,16), cardX+54, cardY+102);
 
-  ctx.font="700 28px Arial";
-  ctx.fillStyle="rgba(255,255,255,0.72)";
-  ctx.fillText("Website", cardX+60, cardY+230);
+  ctx.font="600 24px Arial";
+  ctx.fillStyle="rgba(255,255,255,0.86)";
+  const tagLines = wrapText(ctx, String(s.tagline||""), 610).slice(0,2);
+  tagLines.forEach((ln,idx)=>ctx.fillText(ln, cardX+54, cardY+146 + idx*30));
+
+  ctx.fillStyle="rgba(255,255,255,0.68)";
+  ctx.font="700 22px Arial";
+  ctx.fillText("Website", cardX+54, cardY+246);
 
   const siteUrl = String(s.siteUrl || SITE_URL);
-  ctx.fillStyle="rgba(255,255,255,0.90)";
-  ctx.font="800 30px Arial";
-  wrapText(ctx, siteUrl, 500).slice(0,2).forEach((ln,idx)=>ctx.fillText(ln, cardX+60, cardY+280 + idx*42));
+  ctx.fillStyle="rgba(255,255,255,0.93)";
+  ctx.font="800 26px Arial";
+  wrapText(ctx, siteUrl, 790).slice(0,2).forEach((ln,idx)=>ctx.fillText(ln, cardX+54, cardY+284 + idx*34));
 
-  ctx.font="700 28px Arial";
-  ctx.fillStyle="rgba(255,255,255,0.72)";
-  ctx.fillText("Instagram", cardX+60, cardY+380);
+  ctx.font="700 22px Arial";
+  ctx.fillStyle="rgba(255,255,255,0.68)";
+  ctx.fillText("Instagram", cardX+54, cardY+398);
 
-  ctx.font="900 34px Arial";
-  ctx.fillStyle="rgba(255,255,255,0.92)";
-  ctx.fillText(String(s.igHandle||"@miiduoa").slice(0,20), cardX+60, cardY+430);
+  ctx.font="900 30px Arial";
+  ctx.fillStyle="rgba(255,255,255,0.95)";
+  ctx.fillText(String(s.igHandle||"@miiduoa").slice(0,20), cardX+54, cardY+438);
+
+  // credit-card chip accent
+  ctx.fillStyle = "rgba(255,255,255,0.78)";
+  roundRect(ctx, cardX + cardW - 132, cardY + 52, 64, 46, 10); ctx.fill();
+  ctx.fillStyle = "rgba(0,0,0,0.18)";
+  roundRect(ctx, cardX + cardW - 124, cardY + 62, 48, 8, 3); ctx.fill();
+  roundRect(ctx, cardX + cardW - 124, cardY + 76, 48, 8, 3); ctx.fill();
 
   ctx.textAlign="center";
   ctx.font="800 34px Arial";
   ctx.fillStyle="rgba(255,255,255,0.88)";
-  ctx.fillText(String(s.cta2||"看更多內容 → IG 主頁").slice(0,26), 540, 1220);
+  ctx.fillText(String(s.cta2||"看更多內容 → IG 主頁").slice(0,26), 540, 1368);
 
   ctx.font="600 26px Arial";
   ctx.fillStyle="rgba(255,255,255,0.55)";
   const hint = String(s.hint||"").trim();
-  if (hint) ctx.fillText(hint.slice(0,40), 540, 1280);
+  if (hint) ctx.fillText(hint.slice(0,40), 540, 1430);
 
   ctx.font="700 30px Arial";
   ctx.fillStyle="rgba(255,255,255,0.55)";
