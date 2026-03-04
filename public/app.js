@@ -46,6 +46,9 @@ let isSelectionMode = false;
 let sessionTimerInterval = null;
 
 let activeModalId = null;
+let navAutoHideInitialized = false;
+let lastScrollY = 0;
+let navHidden = false;
 
 let promoSettings = {
   displayName: "Miiduoa",
@@ -617,7 +620,7 @@ function openShareModalFor(msg){
     video.style.display = 'block';
     video.src = mediaUrl;
     if (mainBtn) mainBtn.textContent = '🚀 分享影片限動';
-    sub.textContent = '偵測到影片，會直接分享這支影片到限動。';
+    sub.textContent = '偵測到影片，會直接分享這支影片到限動。建議先裁成 9:16（1080x1920）避免 IG 自動裁切重點。';
   } else {
     const canvas = generatePromoStoryCanvas();
     img.src = canvas.toDataURL("image/png", 0.92);
@@ -1691,6 +1694,7 @@ async function sharePromoStory(){
       const blob = await res.blob();
 
       if (sharePayload.mediaType === 'video') {
+        showToast("💡 建議先裁成 9:16（1080x1920）避免限動被裁切");
         await shareOrDownload(blob, "miiduoa_story_video.mp4", SHARE_TITLE, "分享影片限動");
         showToast("🎬 影片限動已準備好！");
       } else {
@@ -1878,6 +1882,43 @@ function initGlobalNav(){
   }
 }
 
+function setNavHidden(hidden){
+  const nav = document.querySelector('.nav');
+  if (!nav) return;
+  navHidden = !!hidden;
+  nav.classList.toggle('nav-hidden', navHidden);
+}
+
+function initNavAutoHide(){
+  if (navAutoHideInitialized) return;
+  navAutoHideInitialized = true;
+  lastScrollY = window.scrollY || 0;
+
+  window.addEventListener('scroll', () => {
+    const curY = window.scrollY || 0;
+    const delta = curY - lastScrollY;
+
+    // 靠近頁首時固定顯示，避免一進站就隱藏
+    if (curY <= 20) {
+      if (navHidden) setNavHidden(false);
+      lastScrollY = curY;
+      return;
+    }
+
+    // 小幅度捲動不觸發，減少抖動感
+    if (Math.abs(delta) < 8) return;
+
+    // 往下滑且已離開頂端：隱藏導覽列；往上滑：顯示導覽列
+    if (delta > 0 && curY > 72) {
+      if (!navHidden) setNavHidden(true);
+    } else if (delta < 0) {
+      if (navHidden) setNavHidden(false);
+    }
+
+    lastScrollY = curY;
+  }, { passive: true });
+}
+
 // 綁定管理登入表單事件（避免依賴 inline onclick）
 function initLoginForm(){
   const input = document.getElementById('admin-pwd');
@@ -1976,6 +2017,7 @@ updateAvatarUI();
 
 async function boot(){
   initGlobalNav();
+  initNavAutoHide();
   await fetchSettingsFromServer();
   await loadMessages();
   render();
