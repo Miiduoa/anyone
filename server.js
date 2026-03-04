@@ -71,7 +71,8 @@ function writeSettings(settings) {
 }
 
 app.use(cors());
-app.use(express.json());
+// 提高 JSON 限制，避免頭貼 base64 太大被擋掉（預設 100kb）
+app.use(express.json({ limit: '1mb' }));
 app.use(morgan('dev'));
 
 // Static frontend (optional: put your index.html in this folder)
