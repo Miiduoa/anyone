@@ -186,11 +186,20 @@ app.patch('/api/messages/:id', (req, res) => {
     const replyText = body.replyText.trim().slice(0, 500);
     if (replyText) {
       msg.replies = msg.replies || [];
-      msg.replies.push({
+      const fromAdmin = !!body.replyFromAdmin;
+      const replyAliasRaw = typeof body.replyAlias === 'string'
+        ? body.replyAlias.trim().slice(0, 16)
+        : '';
+      const reply = {
         id: nanoid(12),
         text: replyText,
-        ts: Date.now()
-      });
+        ts: Date.now(),
+        fromAdmin
+      };
+      if (replyAliasRaw) {
+        reply.alias = replyAliasRaw;
+      }
+      msg.replies.push(reply);
     }
   }
 

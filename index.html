@@ -1143,12 +1143,12 @@ function renderWallPage(){
                   : `<div style="font-size:12px; color: rgba(255,255,255,0.45); padding:6px 10px; border-radius:12px; border:1px solid rgba(255,255,255,0.08); background: rgba(255,255,255,0.03);">🔒 內容尚未公開</div>`
                 }
               </div>
-              ${m.isAdminPost && m.status==='public'
+              ${(m.status==='public')
                 ? `<div>
-                    <button style="background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.12); border-radius:999px; padding:5px 12px; font-size:12px; color:rgba(255,255,255,0.75); cursor:pointer;" onclick="togglePublicReplyBox('${m.id}')">💬 回覆這則貼文</button>
+                    <button style="background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.12); border-radius:999px; padding:5px 12px; font-size:12px; color:rgba(255,255,255,0.75); cursor:pointer;" onclick="togglePublicReplyBox('${m.id}')">💬 回覆這則訊息</button>
                     <div id="public-reply-box-${m.id}" style="margin-top:6px; display:none;">
                       <input id="public-reply-alias-${m.id}" placeholder="你的暱稱（可不填）" maxlength="16" style="width:100%; padding:8px 10px; border-radius:8px; border:1px solid rgba(255,255,255,0.12); background:rgba(255,255,255,0.03); color:var(--color-text); font-size:12px; margin-bottom:6px;"/>
-                      <textarea id="public-reply-text-${m.id}" placeholder="寫下你對這則貼文的回覆..." maxlength="500" style="width:100%; min-height:70px; border-radius:8px; border:1px solid rgba(255,255,255,0.12); background:rgba(255,255,255,0.04); color:var(--color-text); padding:8px 10px; font-size:13px;"></textarea>
+                      <textarea id="public-reply-text-${m.id}" placeholder="寫下你對這則訊息的回覆..." maxlength="500" style="width:100%; min-height:70px; border-radius:8px; border:1px solid rgba(255,255,255,0.12); background:rgba(255,255,255,0.04); color:var(--color-text); padding:8px 10px; font-size:13px;"></textarea>
                       <div style="display:flex; gap:8px; margin-top:6px; justify-content:flex-end;">
                         <button class="action-btn" style="flex:0 0 auto; min-width:70px; padding:6px 10px; font-size:12px;" onclick="togglePublicReplyBox('${m.id}')">取消</button>
                         <button class="action-btn primary" style="flex:0 0 auto; min-width:90px; padding:6px 10px; font-size:12px;" onclick="submitPublicReply('${m.id}')">送出回覆</button>
