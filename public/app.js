@@ -1750,6 +1750,21 @@ function render(){
   }
 }
 
+// 綁定全域導覽列（避免依賴 inline onclick，符合嚴格 CSP）
+function initGlobalNav(){
+  const title = document.querySelector('.nav-title');
+  if (title) {
+    title.addEventListener('click', function(){ showPage('home'); });
+  }
+  const navBtns = document.querySelectorAll('.nav-btn');
+  for (let i = 0; i < navBtns.length; i++) {
+    (function(btn){
+      const page = btn.getAttribute('data-page') || 'home';
+      btn.addEventListener('click', function(){ showPage(page); });
+    })(navBtns[i]);
+  }
+}
+
 function updateSessionTimer(){
   if (sessionTimerInterval) return;
   sessionTimerInterval=setInterval(()=>{
@@ -1820,6 +1835,7 @@ initAvatarPicker();
 updateAvatarUI();
 
 async function boot(){
+  initGlobalNav();
   await fetchSettingsFromServer();
   await loadMessages();
   render();
