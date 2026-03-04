@@ -10,6 +10,7 @@ const { nanoid } = require('nanoid');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const IS_PROD = process.env.NODE_ENV === 'production';
 
 const DATA_DIR = path.join(__dirname, 'data');
 const MSG_FILE = path.join(DATA_DIR, 'messages.json');
@@ -119,6 +120,13 @@ function requireAdminToken(req, res) {
     res.status(401).json({ error: 'unauthorized' });
     return null;
   }
+  const reqIp = req.ip;
+  const reqUa = req.headers['user-agent'] || '';
+  if (sess.ip !== reqIp || sess.ua !== reqUa) {
+    adminSessions.delete(token);
+    res.status(401).json({ error: 'unauthorized' });
+    return null;
+  }
   return token;
 }
 
@@ -135,8 +143,12 @@ app.use(cors({
   origin: (origin, callback) => {
     // 非瀏覽器（如 cURL / Postman）沒有 origin，直接允許
     if (!origin) return callback(null, true);
-    // 若未設定白名單，預設允許所有（維持原本行為）
-    if (ALLOWED_ORIGINS.length === 0 || ALLOWED_ORIGINS.includes(origin)) {
+    // 開發環境：若未設定白名單，允許所有，方便本機測試
+    if (!IS_PROD && ALLOWED_ORIGINS.length === 0) {
+      return callback(null, true);
+    }
+    // 生產環境：必須在白名單內才允許
+    if (ALLOWED_ORIGINS.includes(origin)) {
       return callback(null, true);
     }
     return callback(new Error('Not allowed by CORS'));
@@ -224,7 +236,9 @@ app.post('/api/admin/login', adminLoginLimiter, (req, res) => {
   const now = Date.now();
   adminSessions.set(token, {
     createdAt: now,
-    expiresAt: now + ADMIN_SESSION_MS
+    expiresAt: now + ADMIN_SESSION_MS,
+    ip: req.ip,
+    ua: req.headers['user-agent'] || ''
   });
   res.json({ token, expiresAt: now + ADMIN_SESSION_MS });
 });
