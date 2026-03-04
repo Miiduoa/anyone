@@ -849,46 +849,46 @@ function renderProfilePage(){
 
   return `
     <div class="page-shell">
-      <div style="display:flex; gap:16px; align-items:flex-end; margin-bottom:20px; padding-top:8px;">
+      <div class="profile-header">
         <div onclick="showPage('profile')" style="cursor:default;">
           ${getAdminAvatarHtml(80)}
         </div>
-        <div style="flex:1; min-width:0;">
-          <div style="font-size:22px; font-weight:900; margin-bottom:2px;">${esc(promoSettings.displayName || 'Miiduoa')}</div>
-          <div style="font-size:14px; color:var(--color-sub); margin-bottom:6px;">@${esc((promoSettings.igHandle || '@miiduoa').replace(/^@/,'')).slice(0,24)}</div>
-          <div style="font-size:13px; color:rgba(255,255,255,0.85); white-space:pre-line;">${esc(promoSettings.tagline || '')}</div>
+        <div class="profile-meta">
+          <div class="profile-name">${esc(promoSettings.displayName || 'Miiduoa')}</div>
+          <div class="profile-handle">@${esc((promoSettings.igHandle || '@miiduoa').replace(/^@/,'')).slice(0,24)}</div>
+          <div class="profile-tagline">${esc(promoSettings.tagline || '')}</div>
         </div>
       </div>
 
-      <div style="display:flex; gap:8px; margin-bottom:18px; flex-wrap:wrap;">
+      <div class="profile-action-row">
         <button class="action-btn" style="flex:1; min-width:140px;" onclick="copySiteLink()">🔗 複製匿名留言連結</button>
         <button class="action-btn" style="flex:1; min-width:140px;" onclick="copyIgLink()">📸 前往 IG 主頁</button>
       </div>
 
-      <div style="border-top:1px solid var(--color-border); padding-top:14px; margin-bottom:10px;">
-        <div style="font-size:14px; font-weight:800; margin-bottom:4px;">Threads 風動態</div>
-        <div style="font-size:12px; color:var(--color-sub);">${adminPosts.length} 則官方貼文 · 任何人都可以在牆上回覆</div>
+      <div class="section-head">
+        <div class="section-title">Threads 風動態</div>
+        <div class="section-subtitle">${adminPosts.length} 則官方貼文 · 任何人都可以在牆上回覆</div>
       </div>
 
       ${adminPosts.length === 0 ? `
-        <div style="padding:40px 0; text-align:center; color:var(--color-sub); font-size:13px;">
+        <div class="empty-note">
           還沒有官方貼文。登入管理後可以在這裡發佈第一則。
         </div>
       ` : `
-        <div style="display:flex; flex-direction:column; gap:14px; margin-bottom:24px;">
+        <div class="thread-list">
           ${adminPosts.map((m,i)=>`
-            <div class="card-hover" style="background:var(--color-card); border-radius:18px; padding:16px 16px 12px; border:1px solid var(--color-border);">
-              <div style="display:flex; gap:10px;">
-                <button onclick="showPage('profile')" style="border:none; background:none; padding:0; cursor:pointer; flex-shrink:0;">
+            <div class="card-hover thread-card">
+              <div class="thread-row">
+                <button onclick="showPage('profile')" class="avatar-plain-btn">
                   ${getAdminAvatarHtml(40)}
                 </button>
-                <div style="flex:1; min-width:0;">
-                  <div style="display:flex; align-items:center; gap:6px; margin-bottom:4px; flex-wrap:wrap;">
-                    <span style="font-size:13px; font-weight:700;">${esc(promoSettings.displayName || 'Miiduoa')}</span>
-                    <span style="font-size:12px; color:var(--color-sub);">@${esc((promoSettings.igHandle || '@miiduoa').replace(/^@/,'')).slice(0,24)}</span>
-                    <span style="font-size:11px; color:var(--color-sub); margin-left:auto;">${timeAgo(m.ts)}</span>
+                <div class="thread-body">
+                  <div class="thread-meta">
+                    <span class="thread-name">${esc(promoSettings.displayName || 'Miiduoa')}</span>
+                    <span class="thread-handle">@${esc((promoSettings.igHandle || '@miiduoa').replace(/^@/,'')).slice(0,24)}</span>
+                    <span class="thread-time">${timeAgo(m.ts)}</span>
                   </div>
-                  <div style="font-size:14px; color:rgba(255,255,255,0.9); line-height:1.7; white-space:pre-line; word-break:break-word;">
+                  <div class="thread-text">
                     ${esc(m.text || '')}
                   </div>
                   ${m.mediaUrl ? `
