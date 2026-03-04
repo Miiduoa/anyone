@@ -761,8 +761,8 @@ function renderSubmitPage(){
     <div class="page-shell" style="max-width: 680px;">
       <div style="text-align:center; margin-bottom: 22px;">
         <div class="hero-badge">💌</div>
-        <h1 style="font-size: 28px; font-weight: 900; margin-bottom: 6px; font-family: 'Playfair Display', serif;">想對Miiduoa說什麼？</h1>
-        <p style="color: var(--color-sub); font-size: 14px; letter-spacing: 1px;">Say anything. Stay anonymous.</p>
+        <h1 class="hero-title">想對Miiduoa說什麼？</h1>
+        <p class="hero-subtitle">Say anything. Stay anonymous.</p>
       </div>
 
       <div class="mini-card" style="margin-bottom: 14px;">
@@ -791,11 +791,11 @@ function renderSubmitPage(){
       </div>
 
       <div class="panel-card" style="box-shadow: 0 0 0 1px rgba(225,48,108,0.1);">
-        <div style="display:flex; gap:10px; align-items:center; margin-bottom: 12px; flex-wrap:wrap;">
-          <div style="flex: 1; min-width: 240px;">
-            <label style="font-size: 13px; color: var(--color-sub); margin-bottom: 8px; display:block;">匿名暱稱（可不填）</label>
+        <div class="submit-head-row">
+          <div class="submit-alias-wrap">
+            <label class="submit-label">匿名暱稱（可不填）</label>
             <input id="alias-input" placeholder="例如：神秘小狐狸 / 隨便你想要的" maxlength="16"
-              style="width:100%; padding: 12px 12px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.08); background: rgba(255,255,255,0.04); color: var(--color-text); outline:none;" />
+              class="submit-input" />
             <div class="small-note">不填會自動生成一個可愛匿名暱稱；之後可用「編輯碼」修改。</div>
           </div>
 
@@ -804,14 +804,14 @@ function renderSubmitPage(){
           </button>
         </div>
 
-        <p style="font-size: 13px; color: var(--color-sub); margin-bottom: 10px;">選擇心情</p>
-        <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom: 16px;" id="mood-selector">
-          ${MOODS.map(m => `<button data-mood="${m}" onclick="selectMood('${m}')" style="width:40px;height:40px;border-radius:12px;font-size:20px;background:rgba(255,255,255,0.05);border:2px solid transparent;cursor:pointer;transition:all .2s;">${m}</button>`).join('')}
+        <p class="submit-label" style="margin-bottom:10px;">選擇心情</p>
+        <div class="mood-row" id="mood-selector">
+          ${MOODS.map(m => `<button data-mood="${m}" onclick="selectMood('${m}')" class="mood-btn">${m}</button>`).join('')}
         </div>
 
         <div style="position: relative;">
           <textarea id="msg-text" placeholder="在這裡寫下你想說的話...&#10;&#10;完全匿名，放心說！" maxlength="500"
-            style="width: 100%; min-height: 160px; background: rgba(255,255,255,0.04); border: 1px solid var(--color-border); border-radius: 14px; padding: 16px; color: var(--color-text); font-size: 15px; line-height: 1.7; resize: vertical; outline: none;"></textarea>
+            class="submit-textarea"></textarea>
           <div id="char-count" style="position:absolute; bottom: 12px; right: 14px; font-size: 12px; color: var(--color-sub);">0/500</div>
         </div>
 
@@ -819,7 +819,7 @@ function renderSubmitPage(){
           🚀 匿名送出
         </button>
 
-        <div style="display:flex; align-items:center; justify-content:center; gap:6px; margin-top: 14px; color: var(--color-sub); font-size: 12px;">
+        <div class="security-note">
           <span>🔒</span><span>完全匿名 · 不追蹤 · 不記錄身份</span>
         </div>
       </div>
@@ -1098,8 +1098,8 @@ function renderLoginPage(){
         <p style="color:var(--color-sub);font-size:13px;margin-top:6px;">僅限授權管理員存取</p>
       </div>
 
-      <div class="panel-card" style="padding:28px;">
-        <div style="display:flex; align-items:center; gap:8px; margin-bottom:20px; background:rgba(225,48,108,0.06); border-radius:12px; padding:10px 14px; border:1px solid rgba(225,48,108,0.12);">
+      <div class="login-card">
+        <div class="login-info secure">
           <span style="font-size:18px;">🛡️</span>
           <div>
             <div style="font-size:12px;font-weight:800;color:var(--color-accent);">伺服器端驗證</div>
@@ -1107,7 +1107,7 @@ function renderLoginPage(){
           </div>
         </div>
 
-        <div style="display:flex; align-items:center; gap:8px; margin-bottom:20px; background:rgba(255,255,255,0.03); border-radius:12px; padding:10px 14px; border:1px solid var(--color-border);">
+        <div class="login-info account">
           <span style="font-size:16px;">👤</span>
           <div>
             <div style="font-size:11px;color:var(--color-sub);">管理員帳號</div>
@@ -1115,12 +1115,12 @@ function renderLoginPage(){
           </div>
         </div>
 
-        <label style="font-size:13px;color:var(--color-sub);margin-bottom:8px;display:block;">管理員密碼</label>
-        <div style="position:relative; margin-bottom:6px;">
+        <label class="submit-label">管理員密碼</label>
+        <div class="login-password-wrap">
           <input type="password" id="admin-pwd" placeholder="輸入管理員密碼" ${isLocked?'disabled':''}
-            style="width:100%; padding:14px 50px 14px 16px; background:${isLocked?'rgba(231,76,60,0.08)':'rgba(255,255,255,0.04)'}; border:1px solid var(--color-border); border-radius:14px; color:var(--color-text); font-size:15px; outline:none;" />
+            class="login-password-input ${isLocked?'locked':''}" />
           <button id="admin-pwd-toggle"
-            style="position:absolute; right:12px; top:50%; transform: translateY(-50%); background:none; border:none; cursor:pointer; font-size:18px; padding:4px; color:var(--color-sub);">👁</button>
+            class="login-password-toggle">👁</button>
         </div>
 
         ${loginAttempts>0?`
@@ -1130,8 +1130,7 @@ function renderLoginPage(){
             </p>
           </div>`:''}
 
-        <button id="admin-login-btn" ${isLocked?'disabled':''}
-          style="width:100%; padding:14px 0; margin-top:8px; background:${isLocked?'#333':'var(--brand-gradient)'}; border:none; border-radius:14px; color:#fff; font-size:15px; font-weight:900; cursor:${isLocked?'not-allowed':'pointer'}; background-size:200% 200%; animation:${isLocked?'none':'gradientMove 3s ease infinite'};">
+        <button id="admin-login-btn" ${isLocked?'disabled':''} class="login-submit-btn">
           ${isLocked?'🔒 已鎖定':'🔓 驗證登入'}
         </button>
       </div>
