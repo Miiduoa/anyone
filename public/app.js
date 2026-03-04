@@ -65,7 +65,7 @@ let promoSettings = {
 let serverAvatarDataUrl = null;
 
 let lastSubmitted = null; // {id, editKey}
-let sharePayload = null; // { kind: 'promo' | 'media', mediaType?: 'image'|'video', url?: string }
+let sharePayload = null; // { kind: 'promo' | 'message' | 'media', msg?: object, mediaType?: 'image'|'video', url?: string }
 
 let editingTarget = null; // {id, editKey}
 
@@ -621,6 +621,12 @@ function openShareModalFor(msg){
     video.src = mediaUrl;
     if (mainBtn) mainBtn.textContent = '🚀 分享影片限動';
     sub.textContent = '偵測到影片，會直接分享這支影片到限動。建議先裁成 9:16（1080x1920）避免 IG 自動裁切重點。';
+  } else if (msg) {
+    sharePayload = { kind: 'message', msg };
+    const canvas = generateMessageStoryCanvas(msg);
+    img.src = canvas.toDataURL("image/png", 0.92);
+    if (mainBtn) mainBtn.textContent = '🚀 分享這則留言限動';
+    sub.textContent = '將分享這則留言內容為主的限動圖。';
   } else {
     const canvas = generatePromoStoryCanvas();
     img.src = canvas.toDataURL("image/png", 0.92);
@@ -1686,6 +1692,74 @@ function generatePromoStoryCanvas(){
   return canvas;
 }
 
+function generateMessageStoryCanvas(msg){
+  const canvas = document.createElement("canvas");
+  canvas.width = 1080;
+  canvas.height = 1920;
+  const ctx = canvas.getContext("2d");
+
+  // Background
+  const bg = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
+  bg.addColorStop(0, "#0b0b0d");
+  bg.addColorStop(0.6, "#16131c");
+  bg.addColorStop(1, "#0b0b0d");
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  // Accent glow
+  const glow = ctx.createRadialGradient(780, 360, 60, 540, 820, 900);
+  glow.addColorStop(0, "rgba(225,48,108,0.24)");
+  glow.addColorStop(0.55, "rgba(131,58,180,0.14)");
+  glow.addColorStop(1, "rgba(0,0,0,0)");
+  ctx.fillStyle = glow;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  // Card
+  const cardX = 96, cardY = 360, cardW = 888, cardH = 1080;
+  ctx.fillStyle = "rgba(255,255,255,0.06)";
+  roundRect(ctx, cardX, cardY, cardW, cardH, 38);
+  ctx.fill();
+  ctx.strokeStyle = "rgba(255,255,255,0.12)";
+  ctx.lineWidth = 2;
+  roundRect(ctx, cardX, cardY, cardW, cardH, 38);
+  ctx.stroke();
+
+  // Header
+  const mood = String(msg?.mood || "💬");
+  const alias = String(msg?.alias || "匿名訪客").slice(0, 24);
+  const content = String(msg?.text || "").trim().slice(0, 500);
+  ctx.textAlign = "left";
+  ctx.fillStyle = "rgba(255,255,255,0.9)";
+  ctx.font = "800 44px Arial";
+  ctx.fillText(`${mood} ${alias}`, cardX + 48, cardY + 88);
+
+  // Body text
+  ctx.fillStyle = "rgba(255,255,255,0.96)";
+  ctx.font = "700 42px Arial";
+  const lines = wrapText(ctx, content, cardW - 96);
+  const maxLines = 14;
+  const finalLines = lines.slice(0, maxLines);
+  const lineHeight = 58;
+  finalLines.forEach((line, i) => {
+    ctx.fillText(line, cardX + 48, cardY + 190 + i * lineHeight);
+  });
+  if (lines.length > maxLines) {
+    ctx.fillText("...", cardX + 48, cardY + 190 + maxLines * lineHeight);
+  }
+
+  // Footer
+  ctx.fillStyle = "rgba(255,255,255,0.62)";
+  ctx.font = "700 28px Arial";
+  ctx.fillText("匿名留言牆", cardX + 48, cardY + cardH - 74);
+
+  ctx.textAlign = "center";
+  ctx.fillStyle = "rgba(255,255,255,0.74)";
+  ctx.font = "800 36px Arial";
+  ctx.fillText("↑ 想說什麼就匿名留言", 540, 1708);
+
+  return canvas;
+}
+
 async function sharePromoStory(){
   try {
     if (sharePayload && sharePayload.kind === 'media' && sharePayload.url) {
@@ -1701,6 +1775,14 @@ async function sharePromoStory(){
         await shareOrDownload(blob, "miiduoa_story_image.png", SHARE_TITLE, "分享圖片限動");
         showToast("🖼️ 圖片限動已準備好！");
       }
+      return;
+    }
+
+    if (sharePayload && sharePayload.kind === 'message' && sharePayload.msg) {
+      const canvas = generateMessageStoryCanvas(sharePayload.msg);
+      const blob = await canvasToBlob(canvas);
+      await shareOrDownload(blob, "miiduoa_message_story.png", SHARE_TITLE, "分享留言限動");
+      showToast("💌 留言限動已準備好！");
       return;
     }
 
