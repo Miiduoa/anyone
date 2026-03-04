@@ -251,7 +251,22 @@ let sessionStart = 0;
 let loginAttempts = 0;
 let lockUntil = 0;
 
-let selectedMessages = new Set();
+// 在部分較舊的內建瀏覽器（例如某些 App 內建 WebView）中，可能沒有原生 Set
+// 這裡做一個極簡相容層，避免整段腳本一開始就因為 new Set() 崩潰
+let SimpleSet;
+if (typeof Set === 'undefined') {
+  SimpleSet = function() { this._m = Object.create(null); };
+  SimpleSet.prototype.add = function(v){ this._m[String(v)] = true; return this; };
+  SimpleSet.prototype.delete = function(v){ const k = String(v); const had = !!this._m[k]; delete this._m[k]; return had; };
+  SimpleSet.prototype.has = function(v){ return !!this._m[String(v)]; };
+  SimpleSet.prototype.clear = function(){ this._m = Object.create(null); };
+  Object.defineProperty(SimpleSet.prototype, 'size', {
+    get: function(){ return Object.keys(this._m).length; }
+  });
+} else {
+  SimpleSet = Set;
+}
+let selectedMessages = new SimpleSet();
 let isSelectionMode = false;
 
 let sessionTimerInterval = null;
