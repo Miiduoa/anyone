@@ -225,7 +225,6 @@ input,textarea,button{font-family:inherit}
 
 <script>
 const ADMIN_EMAIL = "demohan513@gmail.com";
-const PWD_HASH = "dc60ff79e8626931778a6b004aba37cf38f30f2c867d0c6b4e9af8689e1364bc"; // nickkookoo
 const SESSION_TIMEOUT = 30 * 60 * 1000;
 const MAX_ATTEMPTS = 5;
 
@@ -768,7 +767,7 @@ function renderMediaHtml(url){
     return `<img src="${safeUrl}" alt="附加圖片" style="max-width:100%; border-radius:12px; margin-top:4px; display:block;"/>`;
   }
   if (/\.(mp4|webm|ogg)$/.test(lower)){
-    return `<video controls style="width:100%; max-height:420px; border-radius:12px; margin-top:4px; background:#000;"><source src="${safeUrl}"></video>`;
+    return `<video autoplay muted loop playsinline controls style="width:100%; max-height:420px; border-radius:12px; margin-top:4px; background:#000; object-fit:cover;"><source src="${safeUrl}"></video>`;
   }
   if (/\.(mp3|wav|ogg)$/.test(lower)){
     return `<audio controls style="width:100%; margin-top:4px;"><source src="${safeUrl}"></audio>`;
@@ -916,7 +915,8 @@ async function saveEdit(){
 
   const payload = {
     alias: aliasVal || genAlias(),
-    text: textVal
+    text: textVal,
+    editKey: editingTarget.editKey
   };
 
   try {

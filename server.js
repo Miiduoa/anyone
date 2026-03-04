@@ -4,6 +4,8 @@ const express = require('express');
 const cors = require('cors');
 const morgan = require('morgan');
 const multer = require('multer');
+const rateLimit = require('express-rate-limit');
+const helmet = require('helmet');
 const { nanoid } = require('nanoid');
 
 const app = express();
@@ -13,10 +15,27 @@ const DATA_DIR = path.join(__dirname, 'data');
 const MSG_FILE = path.join(DATA_DIR, 'messages.json');
 const SETTINGS_FILE = path.join(DATA_DIR, 'settings.json');
 const MEDIA_DIR = path.join(DATA_DIR, 'media');
+const PUBLIC_DIR = path.join(__dirname, 'public');
 
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || '';
 const ADMIN_SESSION_MS = 2 * 60 * 60 * 1000; // 2 小時
 const adminSessions = new Map(); // token -> { createdAt, expiresAt }
+
+// Admin 登入暴力破解防護（IP 基礎的速率限制）
+const adminLoginLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000, // 10 分鐘視窗
+  max: 20, // 同一 IP 最多 20 次嘗試
+  standardHeaders: true,
+  legacyHeaders: false
+});
+
+// 匿名留言 API 速率限制（避免被濫刷）
+const createMessageLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 分鐘視窗
+  max: 60, // 同一 IP 每分鐘最多 60 則
+  standardHeaders: true,
+  legacyHeaders: false
+});
 
 if (!fs.existsSync(DATA_DIR)) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -103,21 +122,63 @@ function requireAdminToken(req, res) {
   return token;
 }
 
-app.use(cors());
+// 基本安全標頭
+app.use(helmet());
+
+// CORS 設定：可透過環境變數 CORS_ORIGINS 設定允許的網域（以逗號分隔）
+const ALLOWED_ORIGINS = (process.env.CORS_ORIGINS || '')
+  .split(',')
+  .map(o => o.trim())
+  .filter(Boolean);
+
+app.use(cors({
+  origin: (origin, callback) => {
+    // 非瀏覽器（如 cURL / Postman）沒有 origin，直接允許
+    if (!origin) return callback(null, true);
+    // 若未設定白名單，預設允許所有（維持原本行為）
+    if (ALLOWED_ORIGINS.length === 0 || ALLOWED_ORIGINS.includes(origin)) {
+      return callback(null, true);
+    }
+    return callback(new Error('Not allowed by CORS'));
+  },
+  allowedHeaders: ['Content-Type', 'x-admin-token']
+}));
 // 提高 JSON 限制，避免頭貼/文字太大被擋掉（預設 100kb）
 app.use(express.json({ limit: '1mb' }));
 app.use(morgan('dev'));
 
-// Static frontend (optional: put your index.html in this folder)
-app.use(express.static(__dirname));
+// Static frontend：僅對外提供 public 資料夾，避免 data 等伺服器端資料被直接讀取
+if (fs.existsSync(PUBLIC_DIR)) {
+  app.use(express.static(PUBLIC_DIR));
+}
 // 靜態提供已上傳的媒體檔案
 app.use('/media', express.static(MEDIA_DIR));
+
+// 媒體上傳允許類型
+const ALLOWED_MIME_PREFIXES = ['image/', 'video/', 'audio/'];
+const ALLOWED_EXTENSIONS = new Set([
+  '.png', '.jpg', '.jpeg', '.gif', '.webp',
+  '.mp4', '.webm', '.ogg',
+  '.mp3', '.wav'
+]);
+
+function pickSafeExt(file) {
+  const mime = file.mimetype || '';
+  if (/^image\//.test(mime)) return '.png';
+  if (/^video\//.test(mime)) return '.mp4';
+  if (/^audio\//.test(mime)) return '.mp3';
+  return '';
+}
 
 // Multer 設定，用於媒體上傳
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, MEDIA_DIR),
   filename: (req, file, cb) => {
-    const ext = path.extname(file.originalname || '').toLowerCase();
+    let ext = path.extname(file.originalname || '').toLowerCase();
+    if (!ALLOWED_EXTENSIONS.has(ext)) {
+      // 如果副檔名不在白名單內，根據 mimetype 給予一個安全的預設
+      ext = pickSafeExt(file);
+    }
     const id = nanoid(16);
     cb(null, ext ? `${id}${ext}` : id);
   }
@@ -126,6 +187,14 @@ const upload = multer({
   storage,
   limits: {
     fileSize: 25 * 1024 * 1024 // 25MB 上限，避免手機影片太大直接被擋
+  },
+  fileFilter: (req, file, cb) => {
+    const mime = file.mimetype || '';
+    const allowed = ALLOWED_MIME_PREFIXES.some(prefix => mime.startsWith(prefix));
+    if (!allowed) {
+      return cb(new Error('invalid_file_type'));
+    }
+    cb(null, true);
   }
 });
 
@@ -139,7 +208,7 @@ app.get('/api/messages', (req, res) => {
 });
 
 // Admin login / logout
-app.post('/api/admin/login', (req, res) => {
+app.post('/api/admin/login', adminLoginLimiter, (req, res) => {
   if (!ADMIN_PASSWORD) {
     return res.status(500).json({ error: 'admin_not_configured' });
   }
@@ -167,7 +236,7 @@ app.post('/api/admin/logout', (req, res) => {
 });
 
 // Create new message (anonymous or admin post)
-app.post('/api/messages', (req, res) => {
+app.post('/api/messages', createMessageLimiter, (req, res) => {
   const { text, mood, alias, adminPost, mediaUrl } = req.body || {};
   const cleanText = String(text || '').trim().slice(0, 500);
   const cleanAlias = String(alias || '').trim().slice(0, 16);
@@ -220,13 +289,27 @@ app.patch('/api/messages/:id', (req, res) => {
   const msg = messages[idx];
   if (!Array.isArray(msg.replies)) msg.replies = [];
 
+  const wantsContentEdit =
+    typeof body.text === 'string' ||
+    typeof body.alias === 'string';
+
   const wantsAdminFields =
     typeof body.status === 'string' ||
     typeof body.pinned === 'boolean' ||
     body.replyFromAdmin === true;
 
+  let isAdmin = false;
   if (wantsAdminFields) {
     if (!requireAdminToken(req, res)) return;
+    isAdmin = true;
+  }
+
+  // 一般使用者編輯內容時，必須提供正確的 editKey
+  if (wantsContentEdit && !isAdmin) {
+    const editKey = typeof body.editKey === 'string' ? body.editKey.trim() : '';
+    if (!editKey || editKey !== msg.editKey) {
+      return res.status(403).json({ error: 'invalid_edit_key' });
+    }
   }
 
   if (typeof body.status === 'string') {
@@ -344,6 +427,9 @@ app.post('/api/upload-media', (req, res) => {
     if (err) {
       if (err instanceof multer.MulterError && err.code === 'LIMIT_FILE_SIZE') {
         return res.status(413).json({ error: 'file_too_large', message: '檔案太大，請縮短或壓縮再上傳（上限約 25MB）。' });
+      }
+      if (err && err.message === 'invalid_file_type') {
+        return res.status(400).json({ error: 'invalid_file_type', message: '只允許上傳圖片、影片或音訊檔。' });
       }
       console.error('upload-media error:', err);
       return res.status(500).json({ error: 'upload_failed', message: '媒體上傳失敗，請稍後再試。' });
