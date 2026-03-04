@@ -1,0 +1,216 @@
+const fs = require('fs');
+const path = require('path');
+const express = require('express');
+const cors = require('cors');
+const morgan = require('morgan');
+const { nanoid } = require('nanoid');
+
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+const DATA_DIR = path.join(__dirname, 'data');
+const MSG_FILE = path.join(DATA_DIR, 'messages.json');
+const SETTINGS_FILE = path.join(DATA_DIR, 'settings.json');
+
+if (!fs.existsSync(DATA_DIR)) {
+  fs.mkdirSync(DATA_DIR, { recursive: true });
+}
+
+function readMessages() {
+  try {
+    const raw = fs.readFileSync(MSG_FILE, 'utf8');
+    const data = JSON.parse(raw);
+    if (Array.isArray(data)) return data;
+    return [];
+  } catch {
+    return [];
+  }
+}
+
+function writeMessages(messages) {
+  fs.writeFileSync(MSG_FILE, JSON.stringify(messages, null, 2), 'utf8');
+}
+
+function readSettings() {
+  const defaultSettings = {
+    promoSettings: {
+      displayName: 'Miiduoa',
+      tagline: '資訊管理｜創作者｜想聽你說話',
+      siteLabel: '匿名悄悄話',
+      siteUrl: '',
+      igHandle: '@miiduoa',
+      igUrl: '',
+      cta1: '匿名留言給我',
+      cta2: '看更多內容 → IG 主頁',
+      hint: '分享到 IG 後加 Link Sticker（建議貼網站）'
+    },
+    avatarDataUrl: null
+  };
+
+  try {
+    const raw = fs.readFileSync(SETTINGS_FILE, 'utf8');
+    const data = JSON.parse(raw);
+    return {
+      promoSettings: { ...defaultSettings.promoSettings, ...(data.promoSettings || {}) },
+      avatarDataUrl: data.avatarDataUrl || null
+    };
+  } catch {
+    return defaultSettings;
+  }
+}
+
+function writeSettings(settings) {
+  const current = readSettings();
+  const next = {
+    promoSettings: { ...current.promoSettings, ...(settings.promoSettings || {}) },
+    avatarDataUrl: typeof settings.avatarDataUrl === 'string'
+      ? settings.avatarDataUrl
+      : current.avatarDataUrl
+  };
+  fs.writeFileSync(SETTINGS_FILE, JSON.stringify(next, null, 2), 'utf8');
+}
+
+app.use(cors());
+app.use(express.json());
+app.use(morgan('dev'));
+
+// Static frontend (optional: put your index.html in this folder)
+app.use(express.static(__dirname));
+
+// Get all messages
+app.get('/api/messages', (req, res) => {
+  const msgs = readMessages();
+  res.json(msgs);
+});
+
+// Create new message
+app.post('/api/messages', (req, res) => {
+  const { text, mood, alias } = req.body || {};
+  const cleanText = String(text || '').trim().slice(0, 500);
+  const cleanAlias = String(alias || '').trim().slice(0, 16);
+  const cleanMood = String(mood || '💬');
+
+  if (!cleanText) {
+    return res.status(400).json({ error: 'text is required' });
+  }
+
+  const messages = readMessages();
+  const now = Date.now();
+
+  const msg = {
+    id: nanoid(16),
+    alias: cleanAlias || `匿名${Math.random().toString(36).slice(2, 6)}`,
+    text: cleanText,
+    mood: cleanMood,
+    ts: now,
+    editedTs: 0,
+    status: 'pending',
+    liked: false,
+    pinned: false,
+    editKey: nanoid(12)
+  };
+
+  messages.unshift(msg);
+  writeMessages(messages);
+  res.status(201).json(msg);
+});
+
+// Update message (status / pin / like / content)
+app.patch('/api/messages/:id', (req, res) => {
+  const { id } = req.params;
+  const body = req.body || {};
+  const messages = readMessages();
+  const idx = messages.findIndex(m => m.id === id);
+  if (idx === -1) return res.status(404).json({ error: 'not found' });
+
+  const msg = messages[idx];
+
+  if (typeof body.status === 'string') {
+    msg.status = ['public', 'pending', 'hidden'].includes(body.status)
+      ? body.status
+      : msg.status;
+  }
+  if (typeof body.pinned === 'boolean') {
+    msg.pinned = body.pinned;
+  }
+  if (typeof body.liked === 'boolean') {
+    msg.liked = body.liked;
+  }
+  if (typeof body.text === 'string') {
+    const t = body.text.trim().slice(0, 500);
+    if (t) {
+      msg.text = t;
+      msg.editedTs = Date.now();
+    }
+  }
+  if (typeof body.alias === 'string') {
+    msg.alias = body.alias.trim().slice(0, 16) || msg.alias;
+  }
+
+  messages[idx] = msg;
+  writeMessages(messages);
+  res.json(msg);
+});
+
+// Delete message
+app.delete('/api/messages/:id', (req, res) => {
+  const { id } = req.params;
+  const messages = readMessages();
+  const next = messages.filter(m => m.id !== id);
+  if (next.length === messages.length) {
+    return res.status(404).json({ error: 'not found' });
+  }
+  writeMessages(next);
+  res.status(204).end();
+});
+
+// Simple stats
+app.get('/api/stats', (req, res) => {
+  const messages = readMessages();
+  const total = messages.length;
+  const pub = messages.filter(m => m.status === 'public').length;
+  const pending = messages.filter(m => m.status === 'pending').length;
+  const hidden = messages.filter(m => m.status === 'hidden').length;
+  res.json({ total, pub, pending, hidden });
+});
+
+// Promo / avatar settings
+app.get('/api/settings', (req, res) => {
+  const settings = readSettings();
+  res.json(settings);
+});
+
+app.patch('/api/settings', (req, res) => {
+  const body = req.body || {};
+  const safe = {};
+
+  if (body.promoSettings && typeof body.promoSettings === 'object') {
+    const p = body.promoSettings;
+    safe.promoSettings = {};
+    if (typeof p.displayName === 'string') safe.promoSettings.displayName = p.displayName.slice(0, 40);
+    if (typeof p.tagline === 'string') safe.promoSettings.tagline = p.tagline.slice(0, 200);
+    if (typeof p.siteLabel === 'string') safe.promoSettings.siteLabel = p.siteLabel.slice(0, 40);
+    if (typeof p.siteUrl === 'string') safe.promoSettings.siteUrl = p.siteUrl.slice(0, 200);
+    if (typeof p.igHandle === 'string') safe.promoSettings.igHandle = p.igHandle.slice(0, 40);
+    if (typeof p.igUrl === 'string') safe.promoSettings.igUrl = p.igUrl.slice(0, 200);
+    if (typeof p.cta1 === 'string') safe.promoSettings.cta1 = p.cta1.slice(0, 60);
+    if (typeof p.cta2 === 'string') safe.promoSettings.cta2 = p.cta2.slice(0, 60);
+    if (typeof p.hint === 'string') safe.promoSettings.hint = p.hint.slice(0, 200);
+  }
+
+  if (typeof body.avatarDataUrl === 'string') {
+    // 粗略限制大小與格式（避免塞整個影片進來）
+    if (body.avatarDataUrl.length <= 400000 && body.avatarDataUrl.startsWith('data:image/')) {
+      safe.avatarDataUrl = body.avatarDataUrl;
+    }
+  }
+
+  writeSettings(safe);
+  const updated = readSettings();
+  res.json(updated);
+});
+
+app.listen(PORT, () => {
+  console.log(`Miiduoa backend listening on http://localhost:${PORT}`);
+});
+
