@@ -14,6 +14,10 @@ const MSG_FILE = path.join(DATA_DIR, 'messages.json');
 const SETTINGS_FILE = path.join(DATA_DIR, 'settings.json');
 const MEDIA_DIR = path.join(DATA_DIR, 'media');
 
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || '';
+const ADMIN_SESSION_MS = 2 * 60 * 60 * 1000; // 2 小時
+const adminSessions = new Map(); // token -> { createdAt, expiresAt }
+
 if (!fs.existsSync(DATA_DIR)) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
 }
@@ -75,6 +79,30 @@ function writeSettings(settings) {
   fs.writeFileSync(SETTINGS_FILE, JSON.stringify(next, null, 2), 'utf8');
 }
 
+function safeEqual(a, b) {
+  if (a.length !== b.length) return false;
+  let res = 0;
+  for (let i = 0; i < a.length; i++) {
+    res |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  }
+  return res === 0;
+}
+
+function requireAdminToken(req, res) {
+  const token = req.headers['x-admin-token'];
+  if (!token) {
+    res.status(401).json({ error: 'unauthorized' });
+    return null;
+  }
+  const sess = adminSessions.get(token);
+  if (!sess || sess.expiresAt <= Date.now()) {
+    adminSessions.delete(token);
+    res.status(401).json({ error: 'unauthorized' });
+    return null;
+  }
+  return token;
+}
+
 app.use(cors());
 // 提高 JSON 限制，避免頭貼/文字太大被擋掉（預設 100kb）
 app.use(express.json({ limit: '1mb' }));
@@ -110,6 +138,34 @@ app.get('/api/messages', (req, res) => {
   res.json(msgs);
 });
 
+// Admin login / logout
+app.post('/api/admin/login', (req, res) => {
+  if (!ADMIN_PASSWORD) {
+    return res.status(500).json({ error: 'admin_not_configured' });
+  }
+  const body = req.body || {};
+  const password = String(body.password || '');
+
+  const ok = safeEqual(ADMIN_PASSWORD, password);
+  if (!ok) {
+    return res.status(401).json({ error: 'invalid_credentials' });
+  }
+
+  const token = nanoid(32);
+  const now = Date.now();
+  adminSessions.set(token, {
+    createdAt: now,
+    expiresAt: now + ADMIN_SESSION_MS
+  });
+  res.json({ token, expiresAt: now + ADMIN_SESSION_MS });
+});
+
+app.post('/api/admin/logout', (req, res) => {
+  const token = req.headers['x-admin-token'];
+  if (token) adminSessions.delete(token);
+  res.status(204).end();
+});
+
 // Create new message (anonymous or admin post)
 app.post('/api/messages', (req, res) => {
   const { text, mood, alias, adminPost, mediaUrl } = req.body || {};
@@ -127,6 +183,10 @@ app.post('/api/messages', (req, res) => {
 
   const messages = readMessages();
   const now = Date.now();
+
+  if (isAdminPost) {
+    if (!requireAdminToken(req, res)) return;
+  }
 
   const msg = {
     id: nanoid(16),
@@ -159,6 +219,15 @@ app.patch('/api/messages/:id', (req, res) => {
 
   const msg = messages[idx];
   if (!Array.isArray(msg.replies)) msg.replies = [];
+
+  const wantsAdminFields =
+    typeof body.status === 'string' ||
+    typeof body.pinned === 'boolean' ||
+    body.replyFromAdmin === true;
+
+  if (wantsAdminFields) {
+    if (!requireAdminToken(req, res)) return;
+  }
 
   if (typeof body.status === 'string') {
     msg.status = ['public', 'pending', 'hidden'].includes(body.status)
@@ -210,6 +279,7 @@ app.patch('/api/messages/:id', (req, res) => {
 
 // Delete message
 app.delete('/api/messages/:id', (req, res) => {
+  if (!requireAdminToken(req, res)) return;
   const { id } = req.params;
   const messages = readMessages();
   const next = messages.filter(m => m.id !== id);
@@ -237,6 +307,7 @@ app.get('/api/settings', (req, res) => {
 });
 
 app.patch('/api/settings', (req, res) => {
+  if (!requireAdminToken(req, res)) return;
   const body = req.body || {};
   const safe = {};
 
@@ -268,6 +339,7 @@ app.patch('/api/settings', (req, res) => {
 
 // 媒體檔案上傳（圖片 / 影片 / 音檔）
 app.post('/api/upload-media', (req, res) => {
+  if (!requireAdminToken(req, res)) return;
   upload.single('file')(req, res, (err) => {
     if (err) {
       if (err instanceof multer.MulterError && err.code === 'LIMIT_FILE_SIZE') {

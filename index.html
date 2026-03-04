@@ -247,6 +247,7 @@ let messages = [];
 let lastSeenMessageTs = 0;
 let activityTimer = null;
 let isAdmin = false;
+let adminToken = null;
 let sessionStart = 0;
 let loginAttempts = 0;
 let lockUntil = 0;
@@ -477,7 +478,11 @@ async function setStatus(id,status){
   try {
     const res = await fetch(`/api/messages/${encodeURIComponent(id)}`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'X-Admin-Token': adminToken || ''
+      },
       body: JSON.stringify({ status })
     });
     if (!res.ok) throw new Error('Failed to update status');
@@ -496,7 +501,10 @@ async function deleteMsg(id){
   render();
   try {
     const res = await fetch(`/api/messages/${encodeURIComponent(id)}`, {
-      method: 'DELETE'
+      method: 'DELETE',
+      headers: {
+        'X-Admin-Token': adminToken || ''
+      }
     });
     if (!res.ok) throw new Error('Failed to delete');
     showToast("🗑 已刪除","danger");
@@ -515,7 +523,11 @@ async function togglePin(id){
   try {
     const res = await fetch(`/api/messages/${encodeURIComponent(id)}`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'X-Admin-Token': adminToken || ''
+      },
       body: JSON.stringify({ pinned: nextPinned })
     });
     if (!res.ok) throw new Error('Failed to toggle pin');
@@ -551,39 +563,56 @@ async function toggleLike(id){
 /* ======= Admin login ======= */
 async function handleLogin(pwd){
   if (lockUntil > Date.now()) return;
-  const hash = await sha256(pwd);
-
-  let match = hash.length === PWD_HASH.length;
-  let diff = 0;
-  for (let i=0;i<hash.length;i++) diff |= hash.charCodeAt(i) ^ PWD_HASH.charCodeAt(i);
-  match = match && diff === 0;
-
-  if (match){
-    isAdmin=true;
-    sessionStart=Date.now();
-    loginAttempts=0;
-    showToast("✅ 登入成功","success");
-    updateAvatarUI();
-    render();
-  } else {
-    loginAttempts++;
-    if (loginAttempts >= MAX_ATTEMPTS){
-      const lockSecs = Math.min(60 * Math.pow(2, Math.floor(loginAttempts / MAX_ATTEMPTS) - 1), 3600);
-      lockUntil = Date.now() + lockSecs * 1000;
-      showToast(`🔒 已鎖定 ${lockSecs} 秒（嘗試 ${loginAttempts} 次）`,"danger");
-    } else {
-      showToast(`❌ 密碼錯誤（${loginAttempts}/${MAX_ATTEMPTS}）`,"danger");
+  try{
+    const res = await fetch('/api/admin/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: JSON.stringify({ password: pwd })
+    });
+    if (!res.ok) {
+      loginAttempts++;
+      if (loginAttempts >= MAX_ATTEMPTS){
+        const lockSecs = Math.min(60 * Math.pow(2, Math.floor(loginAttempts / MAX_ATTEMPTS) - 1), 3600);
+        lockUntil = Date.now() + lockSecs * 1000;
+        showToast(`🔒 已鎖定 ${lockSecs} 秒（嘗試 ${loginAttempts} 次）`,"danger");
+      } else {
+        showToast(`❌ 密碼錯誤（${loginAttempts}/${MAX_ATTEMPTS}）`,"danger");
+      }
+      render();
+      return;
     }
-    render();
+    const data = await res.json();
+    adminToken = data.token || null;
+    isAdmin = !!adminToken;
+    if (isAdmin){
+      sessionStart = Date.now();
+      loginAttempts = 0;
+      showToast("✅ 登入成功","success");
+      updateAvatarUI();
+      render();
+    } else {
+      showToast("❌ 登入失敗","danger");
+    }
+  }catch(e){
+    console.error(e);
+    showToast("⚠️ 登入時發生錯誤，請稍後再試","danger");
   }
 }
 function handleLogout(){
+  const token = adminToken;
+  adminToken = null;
   isAdmin=false; sessionStart=0; currentPage='home';
   if (sessionTimerInterval){ clearInterval(sessionTimerInterval); sessionTimerInterval=null; }
   isSelectionMode=false; selectedMessages.clear();
   showToast("已安全登出","danger");
   updateAvatarUI();
   render();
+  if (token){
+    fetch('/api/admin/logout', {
+      method: 'POST',
+      headers: { 'X-Admin-Token': token }
+    }).catch(()=>{});
+  }
 }
 
 /* ======= Avatar (admin editable，改走後端設定) ======= */
