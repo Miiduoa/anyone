@@ -97,7 +97,7 @@ const storage = multer.diskStorage({
 const upload = multer({
   storage,
   limits: {
-    fileSize: 10 * 1024 * 1024 // 10MB
+    fileSize: 25 * 1024 * 1024 // 25MB 上限，避免手機影片太大直接被擋
   }
 });
 
@@ -267,12 +267,21 @@ app.patch('/api/settings', (req, res) => {
 });
 
 // 媒體檔案上傳（圖片 / 影片 / 音檔）
-app.post('/api/upload-media', upload.single('file'), (req, res) => {
-  if (!req.file) {
-    return res.status(400).json({ error: 'no_file' });
-  }
-  const urlPath = `/media/${req.file.filename}`;
-  res.json({ url: urlPath });
+app.post('/api/upload-media', (req, res) => {
+  upload.single('file')(req, res, (err) => {
+    if (err) {
+      if (err instanceof multer.MulterError && err.code === 'LIMIT_FILE_SIZE') {
+        return res.status(413).json({ error: 'file_too_large', message: '檔案太大，請縮短或壓縮再上傳（上限約 25MB）。' });
+      }
+      console.error('upload-media error:', err);
+      return res.status(500).json({ error: 'upload_failed', message: '媒體上傳失敗，請稍後再試。' });
+    }
+    if (!req.file) {
+      return res.status(400).json({ error: 'no_file', message: '沒有收到檔案。' });
+    }
+    const urlPath = `/media/${req.file.filename}`;
+    res.json({ url: urlPath });
+  });
 });
 
 app.listen(PORT, () => {
