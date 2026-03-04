@@ -66,6 +66,7 @@ let serverAvatarDataUrl = null;
 
 let lastSubmitted = null; // {id, editKey}
 let sharePayload = null; // { kind: 'promo' | 'message' | 'media', msg?: object, mediaType?: 'image'|'video', url?: string }
+const wallMessageSnapshot = new Map(); // id -> message at last wall render
 
 let editingTarget = null; // {id, editKey}
 
@@ -647,7 +648,9 @@ function openShareModalFor(msg){
 }
 
 function openShareModalById(id){
-  const msg = messages.find(item => item.id === id) || null;
+  const msg = messages.find(item => item.id === id)
+    || wallMessageSnapshot.get(id)
+    || null;
   openShareModalFor(msg);
 }
 
@@ -968,6 +971,17 @@ function renderWallPage(){
     if (!a.pinned && !!b.pinned) return 1;
     return b.ts - a.ts;
   });
+  wallMessageSnapshot.clear();
+  for (let i = 0; i < sorted.length; i++) {
+    const m = sorted[i];
+    wallMessageSnapshot.set(m.id, {
+      id: m.id,
+      alias: m.alias,
+      text: m.text,
+      mood: m.mood,
+      mediaUrl: m.mediaUrl || null
+    });
+  }
 
   if (sorted.length===0){
     return `
