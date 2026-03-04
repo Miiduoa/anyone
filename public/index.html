@@ -312,10 +312,11 @@ input,textarea,button{font-family:inherit}
 
   <div class="modal-preview">
     <img id="share-preview-img" alt="Story Preview" />
+    <video id="share-preview-video" style="display:none; width:100%; max-height:460px; background:#000;" autoplay muted loop playsinline controls></video>
   </div>
 
   <div class="modal-actions">
-    <button class="action-btn primary" onclick="sharePromoStory()">🚀 分享名片限動</button>
+    <button id="share-main-btn" class="action-btn primary" onclick="sharePromoStory()">🚀 分享名片限動</button>
     <button class="action-btn" onclick="copySiteLink()">📋 複製網站連結</button>
     <button class="action-btn" onclick="copyIgLink()">📋 複製 IG 連結</button>
     <button class="action-btn danger" onclick="closeModal()">先不要</button>

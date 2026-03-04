@@ -62,6 +62,7 @@ let promoSettings = {
 let serverAvatarDataUrl = null;
 
 let lastSubmitted = null; // {id, editKey}
+let sharePayload = null; // { kind: 'promo' | 'media', mediaType?: 'image'|'video', url?: string }
 
 let editingTarget = null; // {id, editKey}
 
@@ -572,15 +573,56 @@ function renderMediaHtml(url){
   return `<a href="${safeUrl}" target="_blank" rel="noopener noreferrer" style="font-size:13px; color:var(--color-accent); text-decoration:underline; display:inline-flex; align-items:center; gap:4px; margin-top:4px;">🔗 開啟附加連結</a>`;
 }
 
+function getMediaTypeFromUrl(url){
+  const u = String(url || '').trim().toLowerCase();
+  if (!u) return null;
+  if (/\.(png|jpe?g|gif|webp)(\?|#|$)/.test(u)) return 'image';
+  if (/\.(mp4|webm|ogg|mov)(\?|#|$)/.test(u)) return 'video';
+  return null;
+}
+
+function normalizeMediaUrl(url){
+  const u = String(url || '').trim();
+  if (!u) return '';
+  if (u.startsWith('http://') || u.startsWith('https://')) return u;
+  if (u.startsWith('/')) return `${location.origin}${u}`;
+  return `${location.origin}/${u}`;
+}
+
 /* ======= Share modal content ======= */
 function openShareModalFor(msg){
   const sub = document.getElementById("share-modal-sub");
   const img = document.getElementById("share-preview-img");
+  const video = document.getElementById("share-preview-video");
+  const mainBtn = document.getElementById("share-main-btn");
 
-  const canvas = generatePromoStoryCanvas();
-  img.src = canvas.toDataURL("image/png", 0.92);
+  sharePayload = { kind: 'promo' };
+  img.style.display = 'block';
+  video.style.display = 'none';
+  video.pause();
+  video.removeAttribute('src');
+  if (mainBtn) mainBtn.textContent = '🚀 分享名片限動';
 
-  sub.textContent = promoSettings.hint || "分享到 IG 後加 Link Sticker（建議貼網站）";
+  const mediaType = msg && msg.mediaUrl ? getMediaTypeFromUrl(msg.mediaUrl) : null;
+  if (mediaType === 'image') {
+    const mediaUrl = normalizeMediaUrl(msg.mediaUrl);
+    sharePayload = { kind: 'media', mediaType: 'image', url: mediaUrl };
+    img.src = mediaUrl;
+    if (mainBtn) mainBtn.textContent = '🚀 分享圖片限動';
+    sub.textContent = '偵測到圖片，會直接分享這張圖片到限動。';
+  } else if (mediaType === 'video') {
+    const mediaUrl = normalizeMediaUrl(msg.mediaUrl);
+    sharePayload = { kind: 'media', mediaType: 'video', url: mediaUrl };
+    img.style.display = 'none';
+    video.style.display = 'block';
+    video.src = mediaUrl;
+    if (mainBtn) mainBtn.textContent = '🚀 分享影片限動';
+    sub.textContent = '偵測到影片，會直接分享這支影片到限動。';
+  } else {
+    const canvas = generatePromoStoryCanvas();
+    img.src = canvas.toDataURL("image/png", 0.92);
+    sub.textContent = promoSettings.hint || "分享到 IG 後加 Link Sticker（建議貼網站）";
+  }
 
   const codebox = document.getElementById("share-codebox");
   const codeEl = document.getElementById("share-edit-code");
@@ -593,6 +635,11 @@ function openShareModalFor(msg){
   }
 
   openModal("share-modal");
+}
+
+function openShareModalById(id){
+  const msg = messages.find(item => item.id === id) || null;
+  openShareModalFor(msg);
 }
 
 function getEditLinkFor(id, editKey){
@@ -1043,6 +1090,9 @@ function renderWallPage(){
               <button onclick="toggleReplyBox('${m.id}')" class="wall-action-btn wall-action-neutral">
                 💬 回覆
               </button>
+              <button onclick="openShareModalById('${m.id}')" class="wall-action-btn wall-action-neutral">
+                📸 分享
+              </button>
               <button onclick="deleteMsg('${m.id}')" class="wall-delete-btn">🗑</button>
             </div>
             <div id="reply-box-${m.id}" class="reply-box">
@@ -1062,6 +1112,9 @@ function renderWallPage(){
                     </button>`
                   : `<div style="font-size:12px; color: rgba(255,255,255,0.45); padding:6px 10px; border-radius:12px; border:1px solid rgba(255,255,255,0.08); background: rgba(255,255,255,0.03);">🔒 內容尚未公開</div>`
                 }
+              </div>
+              <div style="display:flex; justify-content:flex-end;">
+                <button class="public-reply-toggle" onclick="openShareModalById('${m.id}')">📸 分享這則</button>
               </div>
               ${(m.status==='public')
                 ? `<div>
@@ -1501,7 +1554,8 @@ function canvasToBlob(canvas){
   return new Promise(resolve => canvas.toBlob(blob => resolve(blob), 'image/png'));
 }
 async function shareOrDownload(blob, filename, title=SHARE_TITLE, text=""){
-  const file = new File([blob], filename, { type: 'image/png' });
+  const fileType = blob && blob.type ? blob.type : 'application/octet-stream';
+  const file = new File([blob], filename, { type: fileType });
   const data = { files: [file], title, text };
 
   if (navigator.canShare && navigator.canShare(data)) {
@@ -1630,10 +1684,39 @@ function generatePromoStoryCanvas(){
 }
 
 async function sharePromoStory(){
-  const canvas = generatePromoStoryCanvas();
-  const blob = await canvasToBlob(canvas);
-  await shareOrDownload(blob, "miiduoa_story.png", SHARE_TITLE, "分享名片限動");
-  showToast("📸 名片限動已產生！到 IG 加上連結貼紙就完成了");
+  try {
+    if (sharePayload && sharePayload.kind === 'media' && sharePayload.url) {
+      const res = await fetch(sharePayload.url);
+      if (!res.ok) throw new Error('fetch media failed');
+      const blob = await res.blob();
+
+      if (sharePayload.mediaType === 'video') {
+        await shareOrDownload(blob, "miiduoa_story_video.mp4", SHARE_TITLE, "分享影片限動");
+        showToast("🎬 影片限動已準備好！");
+      } else {
+        await shareOrDownload(blob, "miiduoa_story_image.png", SHARE_TITLE, "分享圖片限動");
+        showToast("🖼️ 圖片限動已準備好！");
+      }
+      return;
+    }
+
+    const canvas = generatePromoStoryCanvas();
+    const blob = await canvasToBlob(canvas);
+    await shareOrDownload(blob, "miiduoa_story.png", SHARE_TITLE, "分享名片限動");
+    showToast("📸 名片限動已產生！到 IG 加上連結貼紙就完成了");
+  } catch (e) {
+    console.error(e);
+    showToast("⚠️ 分享檔案失敗，改用名片圖重試中","danger");
+    try {
+      const canvas = generatePromoStoryCanvas();
+      const blob = await canvasToBlob(canvas);
+      await shareOrDownload(blob, "miiduoa_story.png", SHARE_TITLE, "分享名片限動");
+      showToast("📸 已改用名片限動");
+    } catch (e2) {
+      console.error(e2);
+      showToast("⚠️ 分享失敗，請稍後再試","danger");
+    }
+  }
 }
 
 /* ======= Batch story (admin) ======= */
