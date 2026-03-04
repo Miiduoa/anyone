@@ -1297,13 +1297,15 @@ function renderAdminPanel(){
           <textarea id="admin-post-text" placeholder="寫點現在想跟大家說的話..." maxlength="500"></textarea>
         </div>
         <div class="field">
-          <label>媒體連結（圖片 / 影片 / 音檔 URL，可選填）</label>
-          <input id="admin-post-media" placeholder="例如：https://...jpg / https://...mp4 / https://...mp3" />
+          <label>圖片 / 影片 / 音檔</label>
+          <input id="admin-post-media-url" placeholder="可貼外部連結，或直接從下方上傳（可不填）" />
+          <input id="admin-post-media-file" type="file" accept="image/*,video/*,audio/*" style="margin-top:6px;" />
+          <div id="admin-post-media-preview" style="margin-top:8px; font-size:12px; color:var(--color-sub);"></div>
         </div>
         <div style="display:flex; gap:8px; margin-top:8px; justify-content:flex-end;">
           <button class="action-btn primary" style="flex:0 0 auto; min-width:140px;" onclick="submitAdminPost()">📣 發佈貼文</button>
         </div>
-        <div class="small-note">發文會以管理者身份公開顯示在留言牆中，並標記為「官方貼文」。</div>
+        <div class="small-note">發文會以管理者身份公開顯示在留言牆中，並標記為「官方貼文」。圖片/影片/音檔可以直接從手機選擇上傳。</div>
       </div>
 
       <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-bottom:12px;">
@@ -1328,6 +1330,39 @@ function renderAdminPanel(){
   `;
 }
 
+function initAdminPostSection(){
+  adminPostMediaFile = null;
+  const fileInput = document.getElementById('admin-post-media-file');
+  const preview = document.getElementById('admin-post-media-preview');
+  if (!fileInput || !preview) return;
+
+  fileInput.addEventListener('change', () => {
+    adminPostMediaFile = null;
+    const file = fileInput.files && fileInput.files[0];
+    if (!file){
+      preview.innerHTML = '';
+      return;
+    }
+    adminPostMediaFile = file;
+    const type = file.type || '';
+    const url = URL.createObjectURL(file);
+    let html = '';
+    if (type.startsWith('image/')){
+      html = `<div style="font-size:12px; margin-bottom:4px;">已選擇圖片：${escapeHTML(file.name)}</div>
+              <img src="${url}" alt="預覽圖片" style="max-width:100%; border-radius:12px; display:block;"/>`;
+    } else if (type.startsWith('video/')){
+      html = `<div style="font-size:12px; margin-bottom:4px;">已選擇影片：${escapeHTML(file.name)}</div>
+              <video controls style="width:100%; max-height:260px; border-radius:12px; background:#000;"><source src="${url}"></video>`;
+    } else if (type.startsWith('audio/')){
+      html = `<div style="font-size:12px; margin-bottom:4px;">已選擇音檔：${escapeHTML(file.name)}</div>
+              <audio controls style="width:100%;"><source src="${url}"></audio>`;
+    } else {
+      html = `<div style="font-size:12px;">已選擇檔案：${escapeHTML(file.name)}</div>`;
+    }
+    preview.innerHTML = html;
+  });
+}
+
 function updatePromoFromForm(){
   if (!isAdmin) return;
   const read = (id) => (document.getElementById(id)?.value || "").trim();
@@ -1348,6 +1383,8 @@ function updatePromoFromForm(){
 }
 
 /* ======= Admin replies & posts helpers ======= */
+let adminPostMediaFile = null;
+
 function toggleReplyBox(id){
   const box = document.getElementById(`reply-box-${id}`);
   if (!box) return;
@@ -1433,18 +1470,40 @@ async function submitPublicReply(id){
 async function submitAdminPost(){
   if (!isAdmin) { showToast("⚠️ 只有管理員可以發文","danger"); return; }
   const el = document.getElementById('admin-post-text');
-  const mediaEl = document.getElementById('admin-post-media');
+  const mediaUrlInput = document.getElementById('admin-post-media-url');
   if (!el) return;
   const text = el.value.trim();
   if (!text){
     showToast("⚠️ 內容不能空白","danger");
     return;
   }
+
+  let mediaUrl = '';
+  try{
+    if (adminPostMediaFile){
+      const fd = new FormData();
+      fd.append('file', adminPostMediaFile);
+      const res = await fetch('/api/upload-media', {
+        method: 'POST',
+        body: fd
+      });
+      if (!res.ok) throw new Error('upload failed');
+      const data = await res.json();
+      mediaUrl = data.url || '';
+    } else if (mediaUrlInput){
+      mediaUrl = mediaUrlInput.value.trim();
+    }
+  }catch(e){
+    console.error(e);
+    showToast("⚠️ 媒體上傳失敗，請稍後再試或改用連結","danger");
+    return;
+  }
+
   const payload = {
     text,
     mood: '📣',
     alias: promoSettings.displayName || 'Miiduoa',
-    mediaUrl: mediaEl ? mediaEl.value.trim() : '',
+    mediaUrl,
     adminPost: true
   };
   try{
@@ -1783,6 +1842,7 @@ function render(){
     else {
       app.innerHTML = renderAdminPanel();
       updateSessionTimer();
+      initAdminPostSection();
     }
   }
 }

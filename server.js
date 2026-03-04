@@ -3,6 +3,7 @@ const path = require('path');
 const express = require('express');
 const cors = require('cors');
 const morgan = require('morgan');
+const multer = require('multer');
 const { nanoid } = require('nanoid');
 
 const app = express();
@@ -11,9 +12,13 @@ const PORT = process.env.PORT || 3000;
 const DATA_DIR = path.join(__dirname, 'data');
 const MSG_FILE = path.join(DATA_DIR, 'messages.json');
 const SETTINGS_FILE = path.join(DATA_DIR, 'settings.json');
+const MEDIA_DIR = path.join(DATA_DIR, 'media');
 
 if (!fs.existsSync(DATA_DIR)) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
+}
+if (!fs.existsSync(MEDIA_DIR)) {
+  fs.mkdirSync(MEDIA_DIR, { recursive: true });
 }
 
 function readMessages() {
@@ -71,12 +76,30 @@ function writeSettings(settings) {
 }
 
 app.use(cors());
-// 提高 JSON 限制，避免頭貼 base64 太大被擋掉（預設 100kb）
+// 提高 JSON 限制，避免頭貼/文字太大被擋掉（預設 100kb）
 app.use(express.json({ limit: '1mb' }));
 app.use(morgan('dev'));
 
 // Static frontend (optional: put your index.html in this folder)
 app.use(express.static(__dirname));
+// 靜態提供已上傳的媒體檔案
+app.use('/media', express.static(MEDIA_DIR));
+
+// Multer 設定，用於媒體上傳
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, MEDIA_DIR),
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname || '').toLowerCase();
+    const id = nanoid(16);
+    cb(null, ext ? `${id}${ext}` : id);
+  }
+});
+const upload = multer({
+  storage,
+  limits: {
+    fileSize: 10 * 1024 * 1024 // 10MB
+  }
+});
 
 // Get all messages
 app.get('/api/messages', (req, res) => {
@@ -232,6 +255,15 @@ app.patch('/api/settings', (req, res) => {
   writeSettings(safe);
   const updated = readSettings();
   res.json(updated);
+});
+
+// 媒體檔案上傳（圖片 / 影片 / 音檔）
+app.post('/api/upload-media', upload.single('file'), (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ error: 'no_file' });
+  }
+  const urlPath = `/media/${req.file.filename}`;
+  res.json({ url: urlPath });
 });
 
 app.listen(PORT, () => {
