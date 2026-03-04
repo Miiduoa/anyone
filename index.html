@@ -996,6 +996,81 @@ function getAvatar(id){
   return AVATARS[Math.abs(Array.from(id).reduce((a,c)=>a+c.charCodeAt(0),0)) % AVATARS.length];
 }
 
+function getAdminAvatarHtml(size){
+  const dataUrl = getStoredAvatarDataURL();
+  const px = size || 80;
+  if (dataUrl){
+    return `<img src="${escapeHTML(dataUrl)}" alt="Miiduoa Avatar" style="width:${px}px;height:${px}px;border-radius:999px;object-fit:cover;border:2px solid rgba(255,255,255,0.3);" />`;
+  }
+  return `<div style="width:${px}px;height:${px}px;border-radius:999px;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#833AB4,#E1306C,#F77737);font-size:${Math.floor(px*0.45)}px;font-weight:900;font-family:'Playfair Display',serif;">M</div>`;
+}
+
+function renderProfilePage(){
+  const adminPosts = messages
+    .filter(m => m.isAdminPost)
+    .sort((a,b)=> (b.ts||0)-(a.ts||0));
+
+  const esc = escapeHTML;
+
+  return `
+    <div style="animation: fadeUp .4s ease; max-width:720px; margin:0 auto;">
+      <div style="display:flex; gap:16px; align-items:flex-end; margin-bottom:20px; padding-top:8px;">
+        <div onclick="showPage('profile')" style="cursor:default;">
+          ${getAdminAvatarHtml(80)}
+        </div>
+        <div style="flex:1; min-width:0;">
+          <div style="font-size:22px; font-weight:900; margin-bottom:2px;">${esc(promoSettings.displayName || 'Miiduoa')}</div>
+          <div style="font-size:14px; color:var(--color-sub); margin-bottom:6px;">@${esc((promoSettings.igHandle || '@miiduoa').replace(/^@/,'')).slice(0,24)}</div>
+          <div style="font-size:13px; color:rgba(255,255,255,0.85); white-space:pre-line;">${esc(promoSettings.tagline || '')}</div>
+        </div>
+      </div>
+
+      <div style="display:flex; gap:8px; margin-bottom:18px; flex-wrap:wrap;">
+        <button class="action-btn" style="flex:1; min-width:140px;" onclick="copySiteLink()">🔗 複製匿名留言連結</button>
+        <button class="action-btn" style="flex:1; min-width:140px;" onclick="copyIgLink()">📸 前往 IG 主頁</button>
+      </div>
+
+      <div style="border-top:1px solid var(--color-border); padding-top:14px; margin-bottom:10px;">
+        <div style="font-size:14px; font-weight:800; margin-bottom:4px;">Threads 風動態</div>
+        <div style="font-size:12px; color:var(--color-sub);">${adminPosts.length} 則官方貼文 · 任何人都可以在牆上回覆</div>
+      </div>
+
+      ${adminPosts.length === 0 ? `
+        <div style="padding:40px 0; text-align:center; color:var(--color-sub); font-size:13px;">
+          還沒有官方貼文。登入管理後可以在這裡發佈第一則。
+        </div>
+      ` : `
+        <div style="display:flex; flex-direction:column; gap:14px; margin-bottom:24px;">
+          ${adminPosts.map((m,i)=>`
+            <div class="card-hover" style="background:var(--color-card); border-radius:18px; padding:16px 16px 12px; border:1px solid var(--color-border);">
+              <div style="display:flex; gap:10px;">
+                <button onclick="showPage('profile')" style="border:none; background:none; padding:0; cursor:pointer; flex-shrink:0;">
+                  ${getAdminAvatarHtml(40)}
+                </button>
+                <div style="flex:1; min-width:0;">
+                  <div style="display:flex; align-items:center; gap:6px; margin-bottom:4px; flex-wrap:wrap;">
+                    <span style="font-size:13px; font-weight:700;">${esc(promoSettings.displayName || 'Miiduoa')}</span>
+                    <span style="font-size:12px; color:var(--color-sub);">@${esc((promoSettings.igHandle || '@miiduoa').replace(/^@/,'')).slice(0,24)}</span>
+                    <span style="font-size:11px; color:var(--color-sub); margin-left:auto;">${timeAgo(m.ts)}</span>
+                  </div>
+                  <div style="font-size:14px; color:rgba(255,255,255,0.9); line-height:1.7; white-space:pre-line; word-break:break-word;">
+                    ${esc(m.text || '')}
+                  </div>
+                  ${m.mediaUrl ? `
+                    <div style="margin-top:8px;">
+                      ${renderMediaHtml(m.mediaUrl)}
+                    </div>
+                  ` : ''}
+                </div>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      `}
+    </div>
+  `;
+}
+
 function renderWallPage(){
   const sorted = messages.slice().sort((a,b)=>{
     if (!!a.pinned && !b.pinned) return -1;
@@ -1055,7 +1130,12 @@ function renderWallPage(){
             ${statusTag}
 
             <div style="display:flex; gap:12px; align-items:flex-start;">
-              <div style="width:42px; height:42px; border-radius:14px; background: rgba(255,255,255,0.06); display:flex; align-items:center; justify-content:center; font-size:22px; flex-shrink:0;">${getAvatar(m.id)}</div>
+              ${m.isAdminPost
+                ? `<button onclick="showPage('profile')" style="border:none; background:none; padding:0; cursor:pointer; flex-shrink:0;">
+                     ${getAdminAvatarHtml(42)}
+                   </button>`
+                : `<div style="width:42px; height:42px; border-radius:14px; background: rgba(255,255,255,0.06); display:flex; align-items:center; justify-content:center; font-size:22px; flex-shrink:0;">${getAvatar(m.id)}</div>`
+              }
               <div style="flex:1; min-width:0;">
                 <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px; flex-wrap:wrap;">
                   <span style="font-weight:800; font-size:14px;">${escapeHTML(m.alias || "匿名小可愛")}</span>
@@ -1089,9 +1169,14 @@ function renderWallPage(){
                       const avatarBg = fromAdmin
                         ? 'linear-gradient(135deg,#833AB4,#E1306C,#F77737)'
                         : 'rgba(255,255,255,0.08)';
+                      const avatarHtml = fromAdmin
+                        ? `<button onclick="showPage('profile')" style="border:none; background:none; padding:0; cursor:pointer;">
+                             ${getAdminAvatarHtml(28)}
+                           </button>`
+                        : `<div style="width:28px; height:28px; border-radius:10px; background:${avatarBg}; display:flex; align-items:center; justify-content:center; font-size:14px;">${escapeHTML(avatarText)}</div>`;
                       return `
                         <div style="display:flex; gap:8px; align-items:flex-start; margin-bottom:6px;">
-                          <div style="width:28px; height:28px; border-radius:10px; background:${avatarBg}; display:flex; align-items:center; justify-content:center; font-size:14px;">${escapeHTML(avatarText)}</div>
+                          ${avatarHtml}
                           <div style="flex:1; min-width:0;">
                             <div style="display:flex; align-items:center; gap:6px; margin-bottom:2px;">
                               <span style="font-size:12px; font-weight:700;">${label}</span>
