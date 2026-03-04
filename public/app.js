@@ -1103,7 +1103,7 @@ function renderLoginPage(){
         <div style="position:relative; margin-bottom:6px;">
           <input type="password" id="admin-pwd" placeholder="輸入管理員密碼" ${isLocked?'disabled':''}
             style="width:100%; padding:14px 50px 14px 16px; background:${isLocked?'rgba(231,76,60,0.08)':'rgba(255,255,255,0.04)'}; border:1px solid var(--color-border); border-radius:14px; color:var(--color-text); font-size:15px; outline:none;" />
-          <button onclick="togglePwdVisibility()"
+          <button id="admin-pwd-toggle"
             style="position:absolute; right:12px; top:50%; transform: translateY(-50%); background:none; border:none; cursor:pointer; font-size:18px; padding:4px; color:var(--color-sub);">👁</button>
         </div>
 
@@ -1114,7 +1114,7 @@ function renderLoginPage(){
             </p>
           </div>`:''}
 
-        <button onclick="submitLogin()" ${isLocked?'disabled':''}
+        <button id="admin-login-btn" ${isLocked?'disabled':''}
           style="width:100%; padding:14px 0; margin-top:8px; background:${isLocked?'#333':'linear-gradient(135deg,#833AB4,#E1306C,#F77737)'}; border:none; border-radius:14px; color:#fff; font-size:15px; font-weight:900; cursor:${isLocked?'not-allowed':'pointer'}; background-size:200% 200%; animation:${isLocked?'none':'gradientMove 3s ease infinite'};">
           ${isLocked?'🔒 已鎖定':'🔓 驗證登入'}
         </button>
@@ -1741,8 +1741,10 @@ function render(){
   } else if (currentPage==='wall'){
     app.innerHTML = renderWallPage();
   } else if (currentPage==='admin'){
-    if (!isAdmin) app.innerHTML = renderLoginPage();
-    else {
+    if (!isAdmin) {
+      app.innerHTML = renderLoginPage();
+      initLoginForm();
+    } else {
       app.innerHTML = renderAdminPanel();
       updateSessionTimer();
       initAdminPostSection();
@@ -1762,6 +1764,31 @@ function initGlobalNav(){
       const page = btn.getAttribute('data-page') || 'home';
       btn.addEventListener('click', function(){ showPage(page); });
     })(navBtns[i]);
+  }
+}
+
+// 綁定管理登入表單事件（避免依賴 inline onclick）
+function initLoginForm(){
+  const input = document.getElementById('admin-pwd');
+  const btn = document.getElementById('admin-login-btn');
+  const toggle = document.getElementById('admin-pwd-toggle');
+
+  if (btn) {
+    btn.addEventListener('click', function () {
+      submitLogin();
+    });
+  }
+  if (input) {
+    input.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') {
+        submitLogin();
+      }
+    });
+  }
+  if (toggle) {
+    toggle.addEventListener('click', function () {
+      togglePwdVisibility();
+    });
   }
 }
 
