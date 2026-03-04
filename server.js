@@ -131,7 +131,11 @@ function requireAdminToken(req, res) {
 }
 
 // 基本安全標頭
-app.use(helmet());
+// 注意：目前前端大量使用 inline script/style 與 inline 事件（onclick）。
+// 若啟用 helmet 預設 CSP，會在 production 直接被瀏覽器阻擋，導致前端幾乎無法操作。
+app.use(helmet({
+  contentSecurityPolicy: false
+}));
 
 // CORS 設定：可透過環境變數 CORS_ORIGINS 設定允許的網域（以逗號分隔）
 const ALLOWED_ORIGINS = (process.env.CORS_ORIGINS || '')
@@ -143,11 +147,11 @@ app.use(cors({
   origin: (origin, callback) => {
     // 非瀏覽器（如 cURL / Postman）沒有 origin，直接允許
     if (!origin) return callback(null, true);
-    // 開發環境：若未設定白名單，允許所有，方便本機測試
-    if (!IS_PROD && ALLOWED_ORIGINS.length === 0) {
+    // 若未設定白名單，預設允許所有，避免部署時因漏設 CORS_ORIGINS 而整站 API 故障
+    if (ALLOWED_ORIGINS.length === 0) {
       return callback(null, true);
     }
-    // 生產環境：必須在白名單內才允許
+    // 有設定白名單時，必須在白名單內才允許
     if (ALLOWED_ORIGINS.includes(origin)) {
       return callback(null, true);
     }

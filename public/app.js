@@ -517,7 +517,11 @@ async function saveSettingsToServer(showToastOnSuccess = true){
     };
     const res = await fetch('/api/settings', {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'X-Admin-Token': adminToken || ''
+      },
       body: JSON.stringify(payload)
     });
     if (!res.ok) throw new Error('settings save failed');
@@ -1308,7 +1312,11 @@ async function submitReply(id){
   try{
     const res = await fetch(`/api/messages/${encodeURIComponent(id)}`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'X-Admin-Token': adminToken || ''
+      },
       body: JSON.stringify({ replyText: text, replyFromAdmin: true })
     });
     if (!res.ok) throw new Error('reply failed');
@@ -1389,6 +1397,9 @@ async function submitAdminPost(){
       fd.append('file', adminPostMediaFile);
       const res = await fetch('/api/upload-media', {
         method: 'POST',
+        headers: {
+          'X-Admin-Token': adminToken || ''
+        },
         body: fd
       });
       if (!res.ok) throw new Error('upload failed');
@@ -1413,7 +1424,11 @@ async function submitAdminPost(){
   try{
     const res = await fetch('/api/messages', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'X-Admin-Token': adminToken || ''
+      },
       body: JSON.stringify(payload)
     });
     if (!res.ok) throw new Error('post failed');
