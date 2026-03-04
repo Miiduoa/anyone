@@ -354,7 +354,10 @@ async function loadMessages(){
     const res = await fetch('/api/messages', { headers: { 'Accept': 'application/json' } });
     if (!res.ok) throw new Error('Failed to load messages');
     const data = await res.json();
-    messages = Array.isArray(data) ? data : [];
+    messages = (Array.isArray(data) ? data : []).map(m => ({
+      ...m,
+      replies: Array.isArray(m.replies) ? m.replies : []
+    }));
   } catch (e) {
     console.error(e);
     messages = [];
@@ -1014,6 +1017,7 @@ function renderWallPage(){
       <div style="display:flex; flex-direction:column; gap:14px;">
         ${sorted.map((m,i)=>{
           const shouldMosaic = (!isAdmin && m.status !== 'public');
+          const isAdminPost = !!m.isAdminPost;
           const statusTag = isAdmin
             ? (m.status === 'pending'
               ? '<div style="position:absolute; top:0; right:0; background: rgba(255,165,0,0.15); border:1px solid rgba(255,165,0,0.3); padding:3px 12px; border-radius:0 0 0 12px; font-size:11px; font-weight:700; color:#ffa500;">⏳ 待審</div>'
@@ -1025,6 +1029,7 @@ function renderWallPage(){
               : '');
 
           const edited = m.editedTs ? `<span style="font-size:11px; color: rgba(255,255,255,0.45); border:1px solid rgba(255,255,255,0.08); padding:1px 8px; border-radius:999px;">✏️ 已編輯</span>` : "";
+          const adminTag = isAdminPost ? `<span style="font-size:11px; color: rgba(225,48,108,0.9); border:1px solid rgba(225,48,108,0.35); padding:1px 8px; border-radius:999px; background:rgba(225,48,108,0.1);">📣 官方貼文</span>` : "";
 
           return `
           <div class="card-hover" style="background: var(--color-card); border-radius:18px; padding:20px; border:1px solid ${m.pinned?'rgba(225,48,108,0.3)':'var(--color-border)'}; animation: fadeUp .4s ease ${i*0.05}s both; position:relative; overflow:hidden; ${shouldMosaic?'opacity:0.88':''}">
@@ -1038,6 +1043,7 @@ function renderWallPage(){
                 <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px; flex-wrap:wrap;">
                   <span style="font-weight:800; font-size:14px;">${escapeHTML(m.alias || "匿名小可愛")}</span>
                   <span style="font-size:20px;">${m.mood}</span>
+                  ${adminTag}
                   ${edited}
                   <span style="font-size:12px; color: var(--color-sub); margin-left:auto;">${timeAgo(m.ts)}</span>
                 </div>
@@ -1048,6 +1054,25 @@ function renderWallPage(){
                   </p>
                   ${shouldMosaic ? '<div style="position:absolute; inset:0; border-radius:8px; background: repeating-linear-gradient(45deg, rgba(0,0,0,0.35) 0 10px, rgba(0,0,0,0.12) 10px 20px); pointer-events:none;"></div>' : ''}
                 </div>
+
+                ${Array.isArray(m.replies) && m.replies.length > 0 ? `
+                  <div style="margin-top:10px; padding:10px 12px; border-radius:12px; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.06);">
+                    ${m.replies.map(r => `
+                      <div style="display:flex; gap:8px; align-items:flex-start; margin-bottom:6px;">
+                        <div style="width:28px; height:28px; border-radius:10px; background: linear-gradient(135deg,#833AB4,#E1306C,#F77737); display:flex; align-items:center; justify-content:center; font-size:14px;">M</div>
+                        <div style="flex:1; min-width:0;">
+                          <div style="display:flex; align-items:center; gap:6px; margin-bottom:2px;">
+                            <span style="font-size:12px; font-weight:700;">Miiduoa 回覆</span>
+                            <span style="font-size:11px; color: rgba(255,255,255,0.5);">${timeAgo(r.ts)}</span>
+                          </div>
+                          <div style="font-size:14px; color: rgba(255,255,255,0.9); line-height:1.6; word-break: break-word;">
+                            ${escapeHTML(r.text)}
+                          </div>
+                        </div>
+                      </div>
+                    `).join('')}
+                  </div>
+                ` : ''}
               </div>
             </div>
 
@@ -1063,6 +1088,13 @@ function renderWallPage(){
                 ${m.pinned?'📌 取消':'📌 置頂'}
               </button>
               <button onclick="deleteMsg('${m.id}')" style="padding:8px 14px; border-radius:10px; font-size:12px; background: rgba(231,76,60,0.08); border:1px solid rgba(231,76,60,0.15); color: rgba(231,76,60,0.7); cursor:pointer;">🗑</button>
+            </div>
+            <div id="reply-box-${m.id}" style="margin-top:8px; display:none;">
+              <textarea id="reply-text-${m.id}" placeholder="回覆這則匿名留言..." maxlength="500" style="width:100%; min-height:80px; border-radius:10px; border:1px solid rgba(255,255,255,0.12); background:rgba(255,255,255,0.04); color:var(--color-text); padding:10px; font-size:13px;"></textarea>
+              <div style="display:flex; gap:8px; margin-top:6px; justify-content:flex-end;">
+                <button class="action-btn" style="flex:0 0 auto; min-width:80px; padding:6px 10px; font-size:12px;" onclick="toggleReplyBox('${m.id}')">取消</button>
+                <button class="action-btn primary" style="flex:0 0 auto; min-width:100px; padding:6px 10px; font-size:12px;" onclick="submitReply('${m.id}')">送出回覆</button>
+              </div>
             </div>
             ` : `
             <div style="display:flex; justify-content:flex-end; margin-top:12px;">
@@ -1206,6 +1238,18 @@ function renderAdminPanel(){
         </div>
       </div>
 
+      <div class="form-card">
+        <div class="form-title">📣 管理者發文（類似 Threads 貼文）</div>
+        <div class="field">
+          <label>貼文內容</label>
+          <textarea id="admin-post-text" placeholder="寫點現在想跟大家說的話..." maxlength="500"></textarea>
+        </div>
+        <div style="display:flex; gap:8px; margin-top:8px; justify-content:flex-end;">
+          <button class="action-btn primary" style="flex:0 0 auto; min-width:140px;" onclick="submitAdminPost()">📣 發佈貼文</button>
+        </div>
+        <div class="small-note">發文會以管理者身份公開顯示在留言牆中，並標記為「官方貼文」。</div>
+      </div>
+
       <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-bottom:12px;">
         ${[
           {icon:"📬", label:"全部", val: total},
@@ -1245,6 +1289,81 @@ function updatePromoFromForm(){
   };
   savePromoSettings();
   render();
+}
+
+/* ======= Admin replies & posts helpers ======= */
+function toggleReplyBox(id){
+  const box = document.getElementById(`reply-box-${id}`);
+  if (!box) return;
+  const cur = box.style.display || 'none';
+  box.style.display = cur === 'none' ? 'block' : 'none';
+}
+
+async function submitReply(id){
+  if (!isAdmin) { showToast("⚠️ 只有管理員可以回覆","danger"); return; }
+  const textarea = document.getElementById(`reply-text-${id}`);
+  if (!textarea) return;
+  const text = textarea.value.trim();
+  if (!text){
+    showToast("⚠️ 回覆不能空白","danger");
+    return;
+  }
+  try{
+    const res = await fetch(`/api/messages/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: JSON.stringify({ replyText: text })
+    });
+    if (!res.ok) throw new Error('reply failed');
+    const updated = await res.json();
+    messages = messages.map(m => m.id === updated.id ? {
+      ...updated,
+      replies: Array.isArray(updated.replies) ? updated.replies : []
+    } : m);
+    textarea.value = '';
+    toggleReplyBox(id);
+    render();
+    showToast("✅ 已回覆此留言");
+  }catch(e){
+    console.error(e);
+    showToast("⚠️ 回覆失敗，請稍後再試","danger");
+  }
+}
+
+async function submitAdminPost(){
+  if (!isAdmin) { showToast("⚠️ 只有管理員可以發文","danger"); return; }
+  const el = document.getElementById('admin-post-text');
+  if (!el) return;
+  const text = el.value.trim();
+  if (!text){
+    showToast("⚠️ 內容不能空白","danger");
+    return;
+  }
+  const payload = {
+    text,
+    mood: '📣',
+    alias: promoSettings.displayName || 'Miiduoa',
+    adminPost: true
+  };
+  try{
+    const res = await fetch('/api/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    if (!res.ok) throw new Error('post failed');
+    const msg = await res.json();
+    messages.unshift({
+      ...msg,
+      replies: Array.isArray(msg.replies) ? msg.replies : []
+    });
+    el.value = '';
+    render();
+    showToast("📣 已發佈一則貼文");
+  }catch(e){
+    console.error(e);
+    showToast("⚠️ 發文失敗，請稍後再試","danger");
+  }
 }
 
 /* ======= Selection / batch story (admin) ======= */
@@ -1585,8 +1704,12 @@ async function pollNewMessages(){
   try{
     const res = await fetch('/api/messages', { headers: { 'Accept': 'application/json' } });
     if (!res.ok) throw new Error('poll failed');
-    const data = await res.json();
-    if (!Array.isArray(data)) return;
+    const raw = await res.json();
+    if (!Array.isArray(raw)) return;
+    const data = raw.map(m => ({
+      ...m,
+      replies: Array.isArray(m.replies) ? m.replies : []
+    }));
 
     const latestTs = data.reduce((max,m)=>Math.max(max, m.ts || 0), 0);
     const prevTs = lastSeenMessageTs || 0;

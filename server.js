@@ -80,16 +80,20 @@ app.use(express.static(__dirname));
 
 // Get all messages
 app.get('/api/messages', (req, res) => {
-  const msgs = readMessages();
+  const msgs = readMessages().map(m => ({
+    ...m,
+    replies: Array.isArray(m.replies) ? m.replies : []
+  }));
   res.json(msgs);
 });
 
-// Create new message
+// Create new message (anonymous or admin post)
 app.post('/api/messages', (req, res) => {
-  const { text, mood, alias } = req.body || {};
+  const { text, mood, alias, adminPost } = req.body || {};
   const cleanText = String(text || '').trim().slice(0, 500);
   const cleanAlias = String(alias || '').trim().slice(0, 16);
-  const cleanMood = String(mood || '💬');
+  const isAdminPost = !!adminPost;
+  const cleanMood = String(mood || (isAdminPost ? '📣' : '💬'));
 
   if (!cleanText) {
     return res.status(400).json({ error: 'text is required' });
@@ -100,15 +104,17 @@ app.post('/api/messages', (req, res) => {
 
   const msg = {
     id: nanoid(16),
-    alias: cleanAlias || `匿名${Math.random().toString(36).slice(2, 6)}`,
+    alias: cleanAlias || (isAdminPost ? 'Miiduoa' : `匿名${Math.random().toString(36).slice(2, 6)}`),
     text: cleanText,
     mood: cleanMood,
     ts: now,
     editedTs: 0,
-    status: 'pending',
+    status: isAdminPost ? 'public' : 'pending',
     liked: false,
     pinned: false,
-    editKey: nanoid(12)
+    editKey: nanoid(12),
+    isAdminPost,
+    replies: []
   };
 
   messages.unshift(msg);
@@ -116,7 +122,7 @@ app.post('/api/messages', (req, res) => {
   res.status(201).json(msg);
 });
 
-// Update message (status / pin / like / content)
+// Update message (status / pin / like / content / replies)
 app.patch('/api/messages/:id', (req, res) => {
   const { id } = req.params;
   const body = req.body || {};
@@ -125,6 +131,7 @@ app.patch('/api/messages/:id', (req, res) => {
   if (idx === -1) return res.status(404).json({ error: 'not found' });
 
   const msg = messages[idx];
+  if (!Array.isArray(msg.replies)) msg.replies = [];
 
   if (typeof body.status === 'string') {
     msg.status = ['public', 'pending', 'hidden'].includes(body.status)
@@ -146,6 +153,18 @@ app.patch('/api/messages/:id', (req, res) => {
   }
   if (typeof body.alias === 'string') {
     msg.alias = body.alias.trim().slice(0, 16) || msg.alias;
+  }
+
+  if (typeof body.replyText === 'string') {
+    const replyText = body.replyText.trim().slice(0, 500);
+    if (replyText) {
+      msg.replies = msg.replies || [];
+      msg.replies.push({
+        id: nanoid(12),
+        text: replyText,
+        ts: Date.now()
+      });
+    }
   }
 
   messages[idx] = msg;
