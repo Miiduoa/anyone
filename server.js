@@ -130,6 +130,44 @@ function requireAdminToken(req, res) {
   return token;
 }
 
+function getValidAdminToken(req) {
+  const token = req.headers['x-admin-token'];
+  if (!token) return null;
+  const sess = adminSessions.get(token);
+  if (!sess || sess.expiresAt <= Date.now()) {
+    adminSessions.delete(token);
+    return null;
+  }
+  const reqIp = req.ip;
+  const reqUa = req.headers['user-agent'] || '';
+  if (sess.ip !== reqIp || sess.ua !== reqUa) {
+    adminSessions.delete(token);
+    return null;
+  }
+  return token;
+}
+
+function toClientMessage(msg, includeSensitive = false) {
+  const base = {
+    id: msg.id,
+    alias: msg.alias,
+    text: msg.text,
+    mood: msg.mood,
+    ts: msg.ts,
+    editedTs: msg.editedTs || 0,
+    status: msg.status,
+    liked: !!msg.liked,
+    pinned: !!msg.pinned,
+    isAdminPost: !!msg.isAdminPost,
+    mediaUrl: msg.mediaUrl || null,
+    replies: Array.isArray(msg.replies) ? msg.replies : []
+  };
+  if (includeSensitive) {
+    base.editKey = msg.editKey;
+  }
+  return base;
+}
+
 // 基本安全標頭
 // 注意：目前前端大量使用 inline script/style 與 inline 事件（onclick）。
 // 若啟用 helmet 預設 CSP，會在 production 直接被瀏覽器阻擋，導致前端幾乎無法操作。
@@ -216,11 +254,25 @@ const upload = multer({
 
 // Get all messages
 app.get('/api/messages', (req, res) => {
-  const msgs = readMessages().map(m => ({
-    ...m,
-    replies: Array.isArray(m.replies) ? m.replies : []
-  }));
+  const isAdmin = !!getValidAdminToken(req);
+  const msgs = readMessages()
+    .filter(m => (isAdmin ? true : m.status === 'public'))
+    .map(m => toClientMessage(m, false));
   res.json(msgs);
+});
+
+app.get('/api/messages/:id', (req, res) => {
+  const { id } = req.params;
+  const messages = readMessages();
+  const msg = messages.find(m => m.id === id);
+  if (!msg) return res.status(404).json({ error: 'not found' });
+
+  const isAdmin = !!getValidAdminToken(req);
+  const editKey = typeof req.query.editKey === 'string' ? req.query.editKey.trim() : '';
+  const canRead = isAdmin || msg.status === 'public' || (editKey && editKey === msg.editKey);
+  if (!canRead) return res.status(404).json({ error: 'not found' });
+
+  res.json(toClientMessage(msg, false));
 });
 
 // Admin login / logout
@@ -353,6 +405,9 @@ app.patch('/api/messages/:id', (req, res) => {
   }
 
   if (typeof body.replyText === 'string') {
+    if (!isAdmin && msg.status !== 'public') {
+      return res.status(403).json({ error: 'forbidden' });
+    }
     const replyText = body.replyText.trim().slice(0, 500);
     if (replyText) {
       msg.replies = msg.replies || [];
@@ -375,7 +430,7 @@ app.patch('/api/messages/:id', (req, res) => {
 
   messages[idx] = msg;
   writeMessages(messages);
-  res.json(msg);
+  res.json(toClientMessage(msg, false));
 });
 
 // Delete message

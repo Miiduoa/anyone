@@ -141,7 +141,9 @@ function saveMessages(){
 
 async function loadMessages(){
   try {
-    const res = await fetch('/api/messages', { headers: { 'Accept': 'application/json' } });
+    const headers = { 'Accept': 'application/json' };
+    if (adminToken) headers['X-Admin-Token'] = adminToken;
+    const res = await fetch('/api/messages', { headers });
     if (!res.ok) throw new Error('Failed to load messages');
     const data = await res.json();
     messages = (Array.isArray(data) ? data : []).map(m => ({
@@ -376,6 +378,7 @@ async function handleLogin(pwd){
     if (isAdmin){
       sessionStart = Date.now();
       loginAttempts = 0;
+      await loadMessages();
       showToast("✅ 登入成功","success");
       updateAvatarUI();
       render();
@@ -395,7 +398,7 @@ function handleLogout(){
   isSelectionMode=false; selectedMessages.clear();
   showToast("已安全登出","danger");
   updateAvatarUI();
-  render();
+  loadMessages().then(() => render());
   if (token){
     fetch('/api/admin/logout', {
       method: 'POST',
@@ -666,7 +669,7 @@ function normalizeEditToken(raw){
   return s.trim();
 }
 
-function loadEditFromToken(){
+async function loadEditFromToken(){
   const tokenInput = document.getElementById("edit-token-input");
   const token = normalizeEditToken(tokenInput.value);
   if (!token || !token.includes(".")){
@@ -674,10 +677,19 @@ function loadEditFromToken(){
     return;
   }
   const [id, editKey] = token.split(".", 2);
-  const msg = messages.find(m => m.id === id && m.editKey === editKey);
-  if (!msg){
-    showToast("⚠️ 找不到可編輯的留言（可能不是同一瀏覽器/已被清除）","danger");
-    return;
+  let msg = messages.find(m => m.id === id);
+  if (!msg) {
+    try {
+      const res = await fetch(`/api/messages/${encodeURIComponent(id)}?editKey=${encodeURIComponent(editKey)}`, {
+        headers: { 'Accept': 'application/json' }
+      });
+      if (!res.ok) throw new Error('load message failed');
+      msg = await res.json();
+    } catch (e) {
+      console.error(e);
+      showToast("⚠️ 找不到可編輯的留言，或編輯碼不正確","danger");
+      return;
+    }
   }
 
   editingTarget = { id, editKey };
@@ -746,9 +758,9 @@ function renderSubmitPage(){
   const heat = getPublicHeatStats();
   const st = heat.stats;
   return `
-    <div style="animation: fadeUp .5s ease; max-width: 680px; margin: 0 auto;">
+    <div class="page-shell" style="max-width: 680px;">
       <div style="text-align:center; margin-bottom: 22px;">
-        <div style="width: 80px; height: 80px; border-radius: 24px; margin: 0 auto 16px; background: linear-gradient(135deg, #833AB4, #E1306C, #F77737); display:flex; align-items:center; justify-content:center; font-size: 36px; box-shadow: 0 8px 32px rgba(225,48,108,0.3);">💌</div>
+        <div class="hero-badge">💌</div>
         <h1 style="font-size: 28px; font-weight: 900; margin-bottom: 6px; font-family: 'Playfair Display', serif;">想對Miiduoa說什麼？</h1>
         <p style="color: var(--color-sub); font-size: 14px; letter-spacing: 1px;">Say anything. Stay anonymous.</p>
       </div>
@@ -778,7 +790,7 @@ function renderSubmitPage(){
         </div>
       </div>
 
-      <div style="background: var(--color-card); border-radius: 20px; padding: 24px; border: 1px solid var(--color-border); box-shadow: 0 0 0 1px rgba(225,48,108,0.1);">
+      <div class="panel-card" style="box-shadow: 0 0 0 1px rgba(225,48,108,0.1);">
         <div style="display:flex; gap:10px; align-items:center; margin-bottom: 12px; flex-wrap:wrap;">
           <div style="flex: 1; min-width: 240px;">
             <label style="font-size: 13px; color: var(--color-sub); margin-bottom: 8px; display:block;">匿名暱稱（可不填）</label>
@@ -803,7 +815,7 @@ function renderSubmitPage(){
           <div id="char-count" style="position:absolute; bottom: 12px; right: 14px; font-size: 12px; color: var(--color-sub);">0/500</div>
         </div>
 
-        <button onclick="submitMessage()" style="width:100%; margin-top: 16px; padding: 14px 0; background: linear-gradient(135deg,#833AB4,#E1306C,#F77737); border:none; border-radius:14px; color:#fff; font-size:15px; font-weight:800; cursor:pointer; background-size:200% 200%; animation: gradientMove 3s ease infinite;">
+        <button onclick="submitMessage()" class="primary-cta">
           🚀 匿名送出
         </button>
 
@@ -825,7 +837,7 @@ function getAdminAvatarHtml(size){
   if (dataUrl){
     return `<img src="${escapeHTML(dataUrl)}" alt="Miiduoa Avatar" style="width:${px}px;height:${px}px;border-radius:999px;object-fit:cover;border:2px solid rgba(255,255,255,0.3);" />`;
   }
-  return `<div style="width:${px}px;height:${px}px;border-radius:999px;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#833AB4,#E1306C,#F77737);font-size:${Math.floor(px*0.45)}px;font-weight:900;font-family:'Playfair Display',serif;">M</div>`;
+  return `<div style="width:${px}px;height:${px}px;border-radius:999px;display:flex;align-items:center;justify-content:center;background:var(--brand-gradient);font-size:${Math.floor(px*0.45)}px;font-weight:900;font-family:'Playfair Display',serif;">M</div>`;
 }
 
 function renderProfilePage(){
@@ -836,7 +848,7 @@ function renderProfilePage(){
   const esc = escapeHTML;
 
   return `
-    <div style="animation: fadeUp .4s ease; max-width:720px; margin:0 auto;">
+    <div class="page-shell">
       <div style="display:flex; gap:16px; align-items:flex-end; margin-bottom:20px; padding-top:8px;">
         <div onclick="showPage('profile')" style="cursor:default;">
           ${getAdminAvatarHtml(80)}
@@ -924,7 +936,7 @@ function renderWallPage(){
           ${isSelectionMode?'✓ 選取模式':'📸 批次限動'}
         </button>
         ${isSelectionMode && selectedMessages.size>0 ? `
-        <button onclick="generateBatchStory()" style="flex:1; padding:10px 0; border-radius:12px; font-size:13px; font-weight:800; background: linear-gradient(135deg,#833AB4,#E1306C,#F77737); border:none; color:#fff; cursor:pointer; background-size:200% 200%; animation: gradientMove 3s ease infinite;">
+        <button onclick="generateBatchStory()" style="flex:1; padding:10px 0; border-radius:12px; font-size:13px; font-weight:800; background: var(--brand-gradient); border:none; color:#fff; cursor:pointer; background-size:200% 200%; animation: gradientMove 3s ease infinite;">
           生成 ${selectedMessages.size} 則限動
         </button>` : ``}
       </div>` : ``}
@@ -949,7 +961,7 @@ function renderWallPage(){
           return `
           <div class="card-hover" style="background: var(--color-card); border-radius:18px; padding:20px; border:1px solid ${m.pinned?'rgba(225,48,108,0.3)':'var(--color-border)'}; animation: fadeUp .4s ease ${i*0.05}s both; position:relative; overflow:hidden; ${shouldMosaic?'opacity:0.88':''}">
             ${isAdmin && isSelectionMode ? `<input type="checkbox" onchange="toggleSelection('${m.id}')" ${selectedMessages.has(m.id)?'checked':''} style="position:absolute; top:12px; left:12px; width:20px; height:20px; cursor:pointer; z-index:10;" />` : ``}
-            ${m.pinned ? '<div style="position:absolute; top:0; right:0; background: linear-gradient(135deg,#833AB4,#E1306C,#F77737); padding:3px 12px 3px 14px; border-radius:0 0 0 12px; font-size:11px; font-weight:700;">📌 置頂</div>' : ''}
+            ${m.pinned ? '<div style="position:absolute; top:0; right:0; background: var(--brand-gradient); padding:3px 12px 3px 14px; border-radius:0 0 0 12px; font-size:11px; font-weight:700;">📌 置頂</div>' : ''}
             ${statusTag}
 
             <div style="display:flex; gap:12px; align-items:flex-start;">
@@ -990,7 +1002,7 @@ function renderWallPage(){
                       const label = fromAdmin ? 'Miiduoa 回覆' : `${safeAlias} 的回覆`;
                       const avatarText = fromAdmin ? 'M' : safeAlias.charAt(0).toUpperCase();
                       const avatarBg = fromAdmin
-                        ? 'linear-gradient(135deg,#833AB4,#E1306C,#F77737)'
+                        ? 'var(--brand-gradient)'
                         : 'rgba(255,255,255,0.08)';
                       const avatarHtml = fromAdmin
                         ? `<button onclick="showPage('profile')" style="border:none; background:none; padding:0; cursor:pointer;">
@@ -1079,14 +1091,14 @@ function renderLoginPage(){
   const remainSec = Math.ceil((lockUntil - Date.now()) / 1000);
 
   return `
-    <div style="max-width:400px; margin:40px auto; animation: fadeUp .5s">
+    <div class="page-shell" style="max-width:400px; margin:40px auto;">
       <div style="text-align:center; margin-bottom:32px;">
-        <div style="width:80px;height:80px;border-radius:24px;margin:0 auto 16px;background:rgba(225,48,108,0.1);border:1px solid rgba(225,48,108,0.2);display:flex;align-items:center;justify-content:center;font-size:36px;">🔐</div>
+        <div class="hero-badge" style="background:rgba(225,48,108,0.1);border:1px solid rgba(225,48,108,0.2);box-shadow:none;">🔐</div>
         <h2 style="font-size:24px;font-weight:900;">管理員驗證</h2>
         <p style="color:var(--color-sub);font-size:13px;margin-top:6px;">僅限授權管理員存取</p>
       </div>
 
-      <div style="background: var(--color-card); border-radius:20px; padding:28px; border:1px solid var(--color-border);">
+      <div class="panel-card" style="padding:28px;">
         <div style="display:flex; align-items:center; gap:8px; margin-bottom:20px; background:rgba(225,48,108,0.06); border-radius:12px; padding:10px 14px; border:1px solid rgba(225,48,108,0.12);">
           <span style="font-size:18px;">🛡️</span>
           <div>
@@ -1119,7 +1131,7 @@ function renderLoginPage(){
           </div>`:''}
 
         <button id="admin-login-btn" ${isLocked?'disabled':''}
-          style="width:100%; padding:14px 0; margin-top:8px; background:${isLocked?'#333':'linear-gradient(135deg,#833AB4,#E1306C,#F77737)'}; border:none; border-radius:14px; color:#fff; font-size:15px; font-weight:900; cursor:${isLocked?'not-allowed':'pointer'}; background-size:200% 200%; animation:${isLocked?'none':'gradientMove 3s ease infinite'};">
+          style="width:100%; padding:14px 0; margin-top:8px; background:${isLocked?'#333':'var(--brand-gradient)'}; border:none; border-radius:14px; color:#fff; font-size:15px; font-weight:900; cursor:${isLocked?'not-allowed':'pointer'}; background-size:200% 200%; animation:${isLocked?'none':'gradientMove 3s ease infinite'};">
           ${isLocked?'🔒 已鎖定':'🔓 驗證登入'}
         </button>
       </div>
@@ -1135,13 +1147,13 @@ function renderAdminPanel(){
   const hid = messages.filter(m => m.status === 'hidden').length;
 
   return `
-    <div style="animation: fadeUp .4s; max-width: 880px; margin: 0 auto;">
+    <div class="page-shell" style="max-width: 880px;">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
         <h2 style="font-size:22px; font-weight:900;">⚙️ 管理後台</h2>
         <button onclick="handleLogout()" style="background: rgba(231,76,60,0.1); border:1px solid rgba(231,76,60,0.2); border-radius:10px; padding:6px 14px; font-size:12px; color: var(--color-no); cursor:pointer; font-weight:800;">🚪 登出</button>
       </div>
 
-      <div style="display:flex; alignitems:center; justify-content:space-between; background: rgba(46,204,113,0.06); border:1px solid rgba(46,204,113,0.15); border-radius:12px; padding:10px 16px; margin-bottom:16px; font-size:12px;">
+      <div class="status-strip">
         <div style="display:flex; align-items:center; gap:6px;">
           <span style="color: var(--color-ok);">🟢</span>
           <span style="color: var(--color-sub);">${ADMIN_EMAIL}</span>
@@ -1216,14 +1228,14 @@ function renderAdminPanel(){
         <div class="small-note">發文會以管理者身份公開顯示在留言牆中，並標記為「官方貼文」。圖片/影片/音檔可以直接從手機選擇上傳。</div>
       </div>
 
-      <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-bottom:12px;">
+      <div class="stats-grid">
         ${[
           {icon:"📬", label:"全部", val: total},
           {icon:"⏳", label:"待審", val: pend},
           {icon:"✅", label:"已公開", val: vis},
           {icon:"🙈", label:"隱藏", val: hid},
         ].map(x=>`
-          <div style="background: var(--color-card); border-radius:14px; padding:16px; border:1px solid var(--color-border); text-align:center;">
+          <div class="stats-card">
             <div style="font-size:22px; margin-bottom:4px;">${x.icon}</div>
             <div style="font-size:26px; font-weight:900;">${x.val}</div>
             <div style="font-size:12px; color: var(--color-sub);">${x.label}</div>
@@ -1755,6 +1767,8 @@ function render(){
     });
   } else if (currentPage==='wall'){
     app.innerHTML = renderWallPage();
+  } else if (currentPage==='profile'){
+    app.innerHTML = renderProfilePage();
   } else if (currentPage==='admin'){
     if (!isAdmin) {
       app.innerHTML = renderLoginPage();
@@ -1824,7 +1838,9 @@ function updateSessionTimer(){
 /* ======= 活動感（新留言通知輪詢） ======= */
 async function pollNewMessages(){
   try{
-    const res = await fetch('/api/messages', { headers: { 'Accept': 'application/json' } });
+    const headers = { 'Accept': 'application/json' };
+    if (adminToken) headers['X-Admin-Token'] = adminToken;
+    const res = await fetch('/api/messages', { headers });
     if (!res.ok) throw new Error('poll failed');
     const raw = await res.json();
     if (!Array.isArray(raw)) return;
