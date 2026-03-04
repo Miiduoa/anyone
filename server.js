@@ -260,7 +260,11 @@ const upload = multer({
 app.get('/api/messages', (req, res) => {
   const isAdmin = !!getValidAdminToken(req);
   const msgs = readMessages()
-    .filter(m => (isAdmin ? true : m.status === 'public'))
+    .filter(m => {
+      if (isAdmin) return true;
+      // 前台顯示公開與待審，待審由前端以馬賽克呈現；隱藏內容仍不對外公開
+      return m.status === 'public' || m.status === 'pending';
+    })
     .map(m => toClientMessage(m, false));
   res.json(msgs);
 });
