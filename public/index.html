@@ -7,7 +7,7 @@
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;700;900&family=Playfair+Display:ital,wght@0,700;1,700&display=swap');
 
-:root{
+::root{
   --color-bg:#0a0a0a; --color-card:#1a1a1a; --color-border:#2a2a2a;
   --color-text:#fafafa; --color-sub:#888; --color-accent:#E1306C; --color-orange:#F77737;
   --color-ok:#2ecc71; --color-no:#e74c3c;
@@ -1347,7 +1347,7 @@ function renderAdminPanel(){
         <button onclick="handleLogout()" style="background: rgba(231,76,60,0.1); border:1px solid rgba(231,76,60,0.2); border-radius:10px; padding:6px 14px; font-size:12px; color: var(--color-no); cursor:pointer; font-weight:800;">🚪 登出</button>
       </div>
 
-      <div style="display:flex; align-items:center; justify-content:space-between; background: rgba(46,204,113,0.06); border:1px solid rgba(46,204,113,0.15); border-radius:12px; padding:10px 16px; margin-bottom:16px; font-size:12px;">
+      <div style="display:flex; alignitems:center; justify-content:space-between; background: rgba(46,204,113,0.06); border:1px solid rgba(46,204,113,0.15); border-radius:12px; padding:10px 16px; margin-bottom:16px; font-size:12px;">
         <div style="display:flex; align-items:center; gap:6px;">
           <span style="color: var(--color-ok);">🟢</span>
           <span style="color: var(--color-sub);">${ADMIN_EMAIL}</span>
@@ -1849,7 +1849,6 @@ async function generateBatchStory(){
     ctx.fillStyle='#fff';
     ctx.textAlign='center';
     ctx.fillText('💌 ' + SHARE_TITLE, canvas.width/2, 200);
-
     const cardStartY=320, cardHeight=400, cardSpacing=40;
 
     batch.forEach((msg,idx)=>{
