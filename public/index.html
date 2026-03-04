@@ -27,6 +27,7 @@ input,textarea,button{font-family:inherit}
 @keyframes slideDown{from{opacity:0;transform:translateY(-20px)}to{opacity:1;transform:translateY(0)}}
 @keyframes gradientMove{0%{background-position:0% 50%}50%{background-position:100% 50%}100%{background-position:0% 50%}}
 @keyframes heartBeat{0%{transform:scale(1)}15%{transform:scale(1.3)}30%{transform:scale(1)}45%{transform:scale(1.15)}60%{transform:scale(1)}}
+@keyframes sheenMove{0%{transform:translateX(-120%) skewX(-22deg)}100%{transform:translateX(220%) skewX(-22deg)}}
 
 .card-hover{
   transition:all .3s cubic-bezier(.4,0,.2,1);
@@ -279,6 +280,13 @@ input,textarea,button{font-family:inherit}
 .thread-time{font-size:11px;color:var(--color-sub);margin-left:auto}
 .thread-text{
   font-size:14px;color:rgba(255,255,255,0.9);line-height:1.7;white-space:pre-line;word-break:break-word
+}
+.story-style-btn{flex:0 0 auto;min-width:120px}
+.story-editor-shimmer{
+  position:absolute;inset:-20% -35%;pointer-events:none;
+  background:linear-gradient(120deg, rgba(255,255,255,0) 35%, rgba(255,255,255,0.18) 48%, rgba(255,255,255,0) 62%);
+  animation:sheenMove 2.8s linear infinite;
+  mix-blend-mode:screen;
 }
 
 .codebox{

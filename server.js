@@ -71,7 +71,11 @@ function readSettings() {
       igUrl: '',
       cta1: '匿名留言給我',
       cta2: '看更多內容 → IG 主頁',
-      hint: '分享到 IG 後加 Link Sticker（建議貼網站）'
+      hint: '分享到 IG 後加 Link Sticker（建議貼網站）',
+      storyStyle: 'metal',
+      storyImageX: 0,
+      storyImageY: 0,
+      storyImageScale: 1
     },
     avatarDataUrl: null
   };
@@ -479,6 +483,18 @@ app.patch('/api/settings', (req, res) => {
     if (typeof p.cta1 === 'string') safe.promoSettings.cta1 = p.cta1.slice(0, 60);
     if (typeof p.cta2 === 'string') safe.promoSettings.cta2 = p.cta2.slice(0, 60);
     if (typeof p.hint === 'string') safe.promoSettings.hint = p.hint.slice(0, 200);
+    if (typeof p.storyStyle === 'string') {
+      safe.promoSettings.storyStyle = ['metal', 'glass'].includes(p.storyStyle) ? p.storyStyle : 'metal';
+    }
+    if (typeof p.storyImageX === 'number' && Number.isFinite(p.storyImageX)) {
+      safe.promoSettings.storyImageX = Math.max(-260, Math.min(260, p.storyImageX));
+    }
+    if (typeof p.storyImageY === 'number' && Number.isFinite(p.storyImageY)) {
+      safe.promoSettings.storyImageY = Math.max(-260, Math.min(260, p.storyImageY));
+    }
+    if (typeof p.storyImageScale === 'number' && Number.isFinite(p.storyImageScale)) {
+      safe.promoSettings.storyImageScale = Math.max(0.6, Math.min(2.2, p.storyImageScale));
+    }
   }
 
   if (typeof body.avatarDataUrl === 'string') {

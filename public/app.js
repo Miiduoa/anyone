@@ -59,7 +59,11 @@ let promoSettings = {
   igUrl: IG_URL,
   cta1: "匿名留言給我",
   cta2: "看更多內容 → IG 主頁",
-  hint: "分享到 IG 後加 Link Sticker（建議貼網站）"
+  hint: "分享到 IG 後加 Link Sticker（建議貼網站）",
+  storyStyle: "metal",
+  storyImageX: 0,
+  storyImageY: 0,
+  storyImageScale: 1
 };
 
 let serverAvatarDataUrl = null;
@@ -434,6 +438,11 @@ function updateAvatarUI(){
     img.removeAttribute('src'); img.style.display='none'; fallback.style.display='flex';
   }
   if (editBtn) editBtn.style.display = isAdmin ? 'inline-flex' : 'none';
+
+  const storyPhoto = document.getElementById('story-image-editor-photo');
+  if (storyPhoto) {
+    storyPhoto.style.backgroundImage = dataUrl ? `url(${dataUrl})` : 'none';
+  }
 }
 function openAvatarPicker(){ if (!isAdmin) return; const input=document.getElementById('avatar-file'); if (input) input.click(); }
 function fileToDataURL(file){
@@ -560,6 +569,102 @@ function savePromoSettings(){
   saveSettingsToServer(true);
 }
 
+function clamp(num, min, max){
+  return Math.max(min, Math.min(max, num));
+}
+
+function getStoryImageState(){
+  return {
+    x: clamp(Number(promoSettings.storyImageX || 0), -260, 260),
+    y: clamp(Number(promoSettings.storyImageY || 0), -260, 260),
+    scale: clamp(Number(promoSettings.storyImageScale || 1), 0.6, 2.2)
+  };
+}
+
+function setStoryStyle(style){
+  promoSettings.storyStyle = style === 'glass' ? 'glass' : 'metal';
+  const metalBtn = document.getElementById('story-style-metal');
+  const glassBtn = document.getElementById('story-style-glass');
+  if (metalBtn) metalBtn.style.opacity = promoSettings.storyStyle === 'metal' ? '1' : '0.7';
+  if (glassBtn) glassBtn.style.opacity = promoSettings.storyStyle === 'glass' ? '1' : '0.7';
+}
+
+function syncStoryImageControls(){
+  const s = getStoryImageState();
+  promoSettings.storyImageX = s.x;
+  promoSettings.storyImageY = s.y;
+  promoSettings.storyImageScale = s.scale;
+
+  const x = document.getElementById('ps_storyImageX');
+  const y = document.getElementById('ps_storyImageY');
+  const sc = document.getElementById('ps_storyImageScale');
+  const xv = document.getElementById('ps_storyImageXVal');
+  const yv = document.getElementById('ps_storyImageYVal');
+  const scv = document.getElementById('ps_storyImageScaleVal');
+
+  if (x) x.value = String(s.x);
+  if (y) y.value = String(s.y);
+  if (sc) sc.value = String(s.scale);
+  if (xv) xv.textContent = String(Math.round(s.x));
+  if (yv) yv.textContent = String(Math.round(s.y));
+  if (scv) scv.textContent = `${s.scale.toFixed(2)}x`;
+
+  const img = document.getElementById('story-image-editor-photo');
+  if (img) {
+    img.style.transform = `translate(calc(-50% + ${s.x}px), calc(-50% + ${s.y}px)) scale(${s.scale})`;
+  }
+}
+
+function initStoryDesignEditor(){
+  setStoryStyle(promoSettings.storyStyle || 'metal');
+  syncStoryImageControls();
+
+  const x = document.getElementById('ps_storyImageX');
+  const y = document.getElementById('ps_storyImageY');
+  const sc = document.getElementById('ps_storyImageScale');
+  const img = document.getElementById('story-image-editor-photo');
+  const editor = document.getElementById('story-image-editor');
+
+  if (img) {
+    if (serverAvatarDataUrl) {
+      img.style.backgroundImage = `url(${serverAvatarDataUrl})`;
+    } else {
+      img.style.backgroundImage = 'none';
+    }
+  }
+
+  if (x) x.oninput = () => { promoSettings.storyImageX = Number(x.value || 0); syncStoryImageControls(); };
+  if (y) y.oninput = () => { promoSettings.storyImageY = Number(y.value || 0); syncStoryImageControls(); };
+  if (sc) sc.oninput = () => { promoSettings.storyImageScale = Number(sc.value || 1); syncStoryImageControls(); };
+
+  if (!editor) return;
+  let dragging = false;
+  let startX = 0;
+  let startY = 0;
+  let baseX = 0;
+  let baseY = 0;
+
+  editor.onpointerdown = (e) => {
+    dragging = true;
+    startX = e.clientX;
+    startY = e.clientY;
+    const s = getStoryImageState();
+    baseX = s.x;
+    baseY = s.y;
+    try { editor.setPointerCapture(e.pointerId); } catch {}
+    e.preventDefault();
+  };
+  editor.onpointermove = (e) => {
+    if (!dragging) return;
+    promoSettings.storyImageX = clamp(baseX + (e.clientX - startX), -260, 260);
+    promoSettings.storyImageY = clamp(baseY + (e.clientY - startY), -260, 260);
+    syncStoryImageControls();
+    e.preventDefault();
+  };
+  editor.onpointerup = () => { dragging = false; };
+  editor.onpointercancel = () => { dragging = false; };
+}
+
 function renderMediaHtml(url){
   const u = String(url || '').trim();
   if (!u) return '';
@@ -594,7 +699,8 @@ function normalizeMediaUrl(url){
 }
 
 /* ======= Share modal content ======= */
-function openShareModalFor(msg){
+async function openShareModalFor(msg, options = {}){
+  const forcePromo = !!(options && options.forcePromo);
   const sub = document.getElementById("share-modal-sub");
   const img = document.getElementById("share-preview-img");
   const video = document.getElementById("share-preview-video");
@@ -607,7 +713,7 @@ function openShareModalFor(msg){
   video.removeAttribute('src');
   if (mainBtn) mainBtn.textContent = '🚀 分享名片限動';
 
-  const mediaType = msg && msg.mediaUrl ? getMediaTypeFromUrl(msg.mediaUrl) : null;
+  const mediaType = !forcePromo && msg && msg.mediaUrl ? getMediaTypeFromUrl(msg.mediaUrl) : null;
   if (mediaType === 'image') {
     const mediaUrl = normalizeMediaUrl(msg.mediaUrl);
     sharePayload = { kind: 'media', mediaType: 'image', url: mediaUrl };
@@ -622,14 +728,14 @@ function openShareModalFor(msg){
     video.src = mediaUrl;
     if (mainBtn) mainBtn.textContent = '🚀 分享影片限動';
     sub.textContent = '偵測到影片，會直接分享這支影片到限動。建議先裁成 9:16（1080x1920）避免 IG 自動裁切重點。';
-  } else if (msg) {
+  } else if (!forcePromo && msg) {
     sharePayload = { kind: 'message', msg };
     const canvas = generateMessageStoryCanvas(msg);
     img.src = canvas.toDataURL("image/png", 0.92);
     if (mainBtn) mainBtn.textContent = '🚀 分享這則留言限動';
     sub.textContent = '將分享這則留言內容為主的限動圖。';
   } else {
-    const canvas = generatePromoStoryCanvas();
+    const canvas = await generatePromoStoryCanvas();
     img.src = canvas.toDataURL("image/png", 0.92);
     sub.textContent = promoSettings.hint || "分享到 IG 後加 Link Sticker（建議貼網站）";
   }
@@ -651,7 +757,7 @@ function openShareModalById(id){
   const msg = messages.find(item => item.id === id)
     || wallMessageSnapshot.get(id)
     || null;
-  openShareModalFor(msg);
+  void openShareModalFor(msg);
 }
 
 function getEditLinkFor(id, editKey){
@@ -1277,6 +1383,31 @@ function renderAdminPanel(){
           </div>
         </div>
 
+        <div style="margin-top:12px; padding:12px; border-radius:12px; border:1px solid rgba(255,255,255,0.08); background:rgba(255,255,255,0.02);">
+          <div style="font-size:13px; font-weight:800; margin-bottom:10px;">🎨 名片風格（Metal / Glass）</div>
+          <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px;">
+            <button id="story-style-metal" class="action-btn story-style-btn" onclick="setStoryStyle('metal')">🪙 金屬</button>
+            <button id="story-style-glass" class="action-btn story-style-btn" onclick="setStoryStyle('glass')">🧊 玻璃</button>
+          </div>
+
+          <div style="font-size:13px; font-weight:800; margin:10px 0 6px;">🖼️ 名片圖片位置（拖移或滑桿）</div>
+          <div id="story-image-editor" style="position:relative; width:100%; max-width:420px; aspect-ratio:9/16; border-radius:14px; overflow:hidden; border:1px solid rgba(255,255,255,0.1); background:linear-gradient(135deg,#151519,#101014); margin-bottom:10px; touch-action:none; cursor:grab;">
+            <div id="story-image-editor-photo" style="position:absolute; left:50%; top:50%; width:180%; height:180%; background-size:cover; background-position:center; transform:translate(-50%,-50%) scale(1);"></div>
+            <div class="story-editor-shimmer"></div>
+            <div style="position:absolute; inset:0; border:1px solid rgba(255,255,255,0.18); pointer-events:none;"></div>
+            <div style="position:absolute; left:50%; top:50%; width:44px; height:44px; transform:translate(-50%,-50%); border:1px dashed rgba(255,255,255,0.35); border-radius:999px; pointer-events:none;"></div>
+          </div>
+
+          <div style="display:grid; gap:8px;">
+            <label style="font-size:12px; color:var(--color-sub);">水平位移：<span id="ps_storyImageXVal">0</span></label>
+            <input id="ps_storyImageX" type="range" min="-260" max="260" step="1" value="${Number(promoSettings.storyImageX || 0)}" />
+            <label style="font-size:12px; color:var(--color-sub);">垂直位移：<span id="ps_storyImageYVal">0</span></label>
+            <input id="ps_storyImageY" type="range" min="-260" max="260" step="1" value="${Number(promoSettings.storyImageY || 0)}" />
+            <label style="font-size:12px; color:var(--color-sub);">縮放：<span id="ps_storyImageScaleVal">1.00x</span></label>
+            <input id="ps_storyImageScale" type="range" min="0.6" max="2.2" step="0.01" value="${Number(promoSettings.storyImageScale || 1)}" />
+          </div>
+        </div>
+
         <div style="display:flex; gap:8px; margin-top:12px; flex-wrap:wrap;">
           <button class="action-btn primary" onclick="updatePromoFromForm()">💾 儲存設定</button>
           <button class="action-btn" onclick="openShareModalFor(null)">👀 預覽/分享名片限動</button>
@@ -1371,7 +1502,11 @@ function updatePromoFromForm(){
     igUrl: read("ps_igUrl") || promoSettings.igUrl,
     cta1: read("ps_cta1") || promoSettings.cta1,
     cta2: read("ps_cta2") || promoSettings.cta2,
-    hint: read("ps_hint") || promoSettings.hint
+    hint: read("ps_hint") || promoSettings.hint,
+    storyStyle: promoSettings.storyStyle === 'glass' ? 'glass' : 'metal',
+    storyImageX: clamp(Number(document.getElementById('ps_storyImageX')?.value || promoSettings.storyImageX || 0), -260, 260),
+    storyImageY: clamp(Number(document.getElementById('ps_storyImageY')?.value || promoSettings.storyImageY || 0), -260, 260),
+    storyImageScale: clamp(Number(document.getElementById('ps_storyImageScale')?.value || promoSettings.storyImageScale || 1), 0.6, 2.2)
   };
   savePromoSettings();
   render();
@@ -1623,6 +1758,52 @@ function drawMetalCard(ctx,x,y,w,h,r){
   ctx.fillStyle=g2;
   roundRect(ctx,x+26,y+28,w-52,10,6); ctx.fill();
 }
+function drawGlassCard(ctx,x,y,w,h,r){
+  ctx.fillStyle="rgba(255,255,255,0.08)";
+  roundRect(ctx,x,y,w,h,r); ctx.fill();
+
+  const g = ctx.createLinearGradient(x,y,x+w,y+h);
+  g.addColorStop(0,"rgba(255,255,255,0.25)");
+  g.addColorStop(0.45,"rgba(255,255,255,0.10)");
+  g.addColorStop(1,"rgba(255,255,255,0.04)");
+  ctx.fillStyle=g;
+  roundRect(ctx,x+2,y+2,w-4,h-4,r-2); ctx.fill();
+
+  ctx.strokeStyle="rgba(255,255,255,0.30)";
+  ctx.lineWidth=2;
+  roundRect(ctx,x+1,y+1,w-2,h-2,r-2); ctx.stroke();
+}
+async function drawStoryHeroImage(ctx, cardX, cardY, cardW, cardH, settings){
+  if (!serverAvatarDataUrl) return;
+  try {
+    const img = await loadImage(serverAvatarDataUrl);
+    const x = Number(settings.storyImageX || 0);
+    const y = Number(settings.storyImageY || 0);
+    const scale = Number(settings.storyImageScale || 1);
+    const zoneX = cardX + cardW - 282;
+    const zoneY = cardY + 78;
+    const zoneW = 210;
+    const zoneH = 210;
+
+    ctx.save();
+    roundRect(ctx, zoneX, zoneY, zoneW, zoneH, 28);
+    ctx.clip();
+    const base = Math.max(zoneW, zoneH) * 1.25 * scale;
+    const drawW = base;
+    const drawH = base;
+    const cx = zoneX + zoneW / 2 + x;
+    const cy = zoneY + zoneH / 2 + y;
+    ctx.drawImage(img, cx - drawW / 2, cy - drawH / 2, drawW, drawH);
+    ctx.restore();
+
+    ctx.strokeStyle = "rgba(255,255,255,0.22)";
+    ctx.lineWidth = 2;
+    roundRect(ctx, zoneX, zoneY, zoneW, zoneH, 28);
+    ctx.stroke();
+  } catch (e) {
+    console.error(e);
+  }
+}
 function fitText(ctx, text, maxWidth, baseSize, minSize, weight=800, family="Arial"){
   let size=baseSize;
   while(size>=minSize){
@@ -1632,7 +1813,7 @@ function fitText(ctx, text, maxWidth, baseSize, minSize, weight=800, family="Ari
   }
   return minSize;
 }
-function generatePromoStoryCanvas(){
+async function generatePromoStoryCanvas(){
   const s = promoSettings;
   const canvas = document.createElement("canvas");
   canvas.width = 1080; canvas.height = 1920;
@@ -1649,7 +1830,12 @@ function generatePromoStoryCanvas(){
   ctx.fillRect(0,0,canvas.width,canvas.height);
 
   const cardX=110, cardY=520, cardW=860, cardH=560;
-  drawMetalCard(ctx, cardX, cardY, cardW, cardH, 40);
+  if ((s.storyStyle || 'metal') === 'glass') {
+    drawGlassCard(ctx, cardX, cardY, cardW, cardH, 40);
+  } else {
+    drawMetalCard(ctx, cardX, cardY, cardW, cardH, 40);
+  }
+  await drawStoryHeroImage(ctx, cardX, cardY, cardW, cardH, s);
 
   ctx.textAlign="center";
   ctx.fillStyle="rgba(255,255,255,0.94)";
@@ -1679,7 +1865,7 @@ function generatePromoStoryCanvas(){
   const siteUrl = String(s.siteUrl || SITE_URL);
   ctx.fillStyle="rgba(255,255,255,0.90)";
   ctx.font="800 30px Arial";
-  wrapText(ctx, siteUrl, 740).slice(0,2).forEach((ln,idx)=>ctx.fillText(ln, cardX+60, cardY+280 + idx*42));
+  wrapText(ctx, siteUrl, 500).slice(0,2).forEach((ln,idx)=>ctx.fillText(ln, cardX+60, cardY+280 + idx*42));
 
   ctx.font="700 28px Arial";
   ctx.fillStyle="rgba(255,255,255,0.72)";
@@ -1800,7 +1986,7 @@ async function sharePromoStory(){
       return;
     }
 
-    const canvas = generatePromoStoryCanvas();
+    const canvas = await generatePromoStoryCanvas();
     const blob = await canvasToBlob(canvas);
     await shareOrDownload(blob, "miiduoa_story.png", SHARE_TITLE, "分享名片限動");
     showToast("📸 名片限動已產生！到 IG 加上連結貼紙就完成了");
@@ -1808,7 +1994,7 @@ async function sharePromoStory(){
     console.error(e);
     showToast("⚠️ 分享檔案失敗，改用名片圖重試中","danger");
     try {
-      const canvas = generatePromoStoryCanvas();
+      const canvas = await generatePromoStoryCanvas();
       const blob = await canvasToBlob(canvas);
       await shareOrDownload(blob, "miiduoa_story.png", SHARE_TITLE, "分享名片限動");
       showToast("📸 已改用名片限動");
@@ -1917,7 +2103,8 @@ async function submitMessage(){
     textarea.value='';
     if (document.getElementById('alias-input')) document.getElementById('alias-input').value='';
     selectedMood='💬';
-    openShareModalFor(msg);
+    // 匿名送出後維持舊版體驗：優先顯示名片限動彈窗
+    void openShareModalFor(msg, { forcePromo: true });
   } catch {
     // addMessage 已經有提示
   }
@@ -1959,6 +2146,7 @@ function render(){
       app.innerHTML = renderAdminPanel();
       updateSessionTimer();
       initAdminPostSection();
+      initStoryDesignEditor();
     }
   }
 }
