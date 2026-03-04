@@ -730,6 +730,23 @@ function savePromoSettings(){
   saveSettingsToServer(true);
 }
 
+function renderMediaHtml(url){
+  const u = String(url || '').trim();
+  if (!u) return '';
+  const lower = u.toLowerCase();
+  const safeUrl = escapeHTML(u);
+  if (/\.(png|jpe?g|gif|webp)$/.test(lower)){
+    return `<img src="${safeUrl}" alt="附加圖片" style="max-width:100%; border-radius:12px; margin-top:4px; display:block;"/>`;
+  }
+  if (/\.(mp4|webm|ogg)$/.test(lower)){
+    return `<video controls style="width:100%; max-height:420px; border-radius:12px; margin-top:4px; background:#000;"><source src="${safeUrl}"></video>`;
+  }
+  if (/\.(mp3|wav|ogg)$/.test(lower)){
+    return `<audio controls style="width:100%; margin-top:4px;"><source src="${safeUrl}"></audio>`;
+  }
+  return `<a href="${safeUrl}" target="_blank" rel="noopener noreferrer" style="font-size:13px; color:var(--color-accent); text-decoration:underline; display:inline-flex; align-items:center; gap:4px; margin-top:4px;">🔗 開啟附加連結</a>`;
+}
+
 /* ======= Share modal content ======= */
 function openShareModalFor(msg){
   const sub = document.getElementById("share-modal-sub");
@@ -1055,22 +1072,38 @@ function renderWallPage(){
                   ${shouldMosaic ? '<div style="position:absolute; inset:0; border-radius:8px; background: repeating-linear-gradient(45deg, rgba(0,0,0,0.35) 0 10px, rgba(0,0,0,0.12) 10px 20px); pointer-events:none;"></div>' : ''}
                 </div>
 
+                ${isAdminPost && m.mediaUrl ? `
+                  <div style="margin-top:8px;">
+                    ${renderMediaHtml(m.mediaUrl)}
+                  </div>
+                ` : ''}
+
                 ${Array.isArray(m.replies) && m.replies.length > 0 ? `
                   <div style="margin-top:10px; padding:10px 12px; border-radius:12px; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.06);">
-                    ${m.replies.map(r => `
-                      <div style="display:flex; gap:8px; align-items:flex-start; margin-bottom:6px;">
-                        <div style="width:28px; height:28px; border-radius:10px; background: linear-gradient(135deg,#833AB4,#E1306C,#F77737); display:flex; align-items:center; justify-content:center; font-size:14px;">M</div>
-                        <div style="flex:1; min-width:0;">
-                          <div style="display:flex; align-items:center; gap:6px; margin-bottom:2px;">
-                            <span style="font-size:12px; font-weight:700;">Miiduoa 回覆</span>
-                            <span style="font-size:11px; color: rgba(255,255,255,0.5);">${timeAgo(r.ts)}</span>
-                          </div>
-                          <div style="font-size:14px; color: rgba(255,255,255,0.9); line-height:1.6; word-break: break-word;">
-                            ${escapeHTML(r.text)}
+                    ${m.replies.map(r => {
+                      const fromAdmin = !!r.fromAdmin;
+                      const alias = r.alias || (fromAdmin ? 'Miiduoa' : '匿名訪客');
+                      const safeAlias = escapeHTML(alias);
+                      const label = fromAdmin ? 'Miiduoa 回覆' : `${safeAlias} 的回覆`;
+                      const avatarText = fromAdmin ? 'M' : safeAlias.charAt(0).toUpperCase();
+                      const avatarBg = fromAdmin
+                        ? 'linear-gradient(135deg,#833AB4,#E1306C,#F77737)'
+                        : 'rgba(255,255,255,0.08)';
+                      return `
+                        <div style="display:flex; gap:8px; align-items:flex-start; margin-bottom:6px;">
+                          <div style="width:28px; height:28px; border-radius:10px; background:${avatarBg}; display:flex; align-items:center; justify-content:center; font-size:14px;">${escapeHTML(avatarText)}</div>
+                          <div style="flex:1; min-width:0;">
+                            <div style="display:flex; align-items:center; gap:6px; margin-bottom:2px;">
+                              <span style="font-size:12px; font-weight:700;">${label}</span>
+                              <span style="font-size:11px; color: rgba(255,255,255,0.5);">${timeAgo(r.ts)}</span>
+                            </div>
+                            <div style="font-size:14px; color: rgba(255,255,255,0.9); line-height:1.6; word-break: break-word;">
+                              ${escapeHTML(r.text)}
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    `).join('')}
+                      `;
+                    }).join('')}
                   </div>
                 ` : ''}
               </div>
@@ -1087,6 +1120,9 @@ function renderWallPage(){
               <button onclick="togglePin('${m.id}')" style="flex:1; min-width:60px; padding:8px 0; border-radius:10px; font-size:12px; font-weight:800; background:${m.pinned?'rgba(225,48,108,0.12)':'rgba(255,255,255,0.04)'}; border:1px solid ${m.pinned?'rgba(225,48,108,0.25)':'var(--color-border)'}; color:${m.pinned?'var(--color-accent)':'var(--color-sub)'}; cursor:pointer;">
                 ${m.pinned?'📌 取消':'📌 置頂'}
               </button>
+              <button onclick="toggleReplyBox('${m.id}')" style="flex:1; min-width:60px; padding:8px 0; border-radius:10px; font-size:12px; font-weight:800; background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.12); color:rgba(255,255,255,0.8); cursor:pointer;">
+                💬 回覆
+              </button>
               <button onclick="deleteMsg('${m.id}')" style="padding:8px 14px; border-radius:10px; font-size:12px; background: rgba(231,76,60,0.08); border:1px solid rgba(231,76,60,0.15); color: rgba(231,76,60,0.7); cursor:pointer;">🗑</button>
             </div>
             <div id="reply-box-${m.id}" style="margin-top:8px; display:none;">
@@ -1097,13 +1133,29 @@ function renderWallPage(){
               </div>
             </div>
             ` : `
-            <div style="display:flex; justify-content:flex-end; margin-top:12px;">
-              ${m.status==='public'
-                ? `<button onclick="toggleLike('${m.id}')" style="background:${m.liked?'rgba(225,48,108,0.15)':'transparent'}; border:1px solid ${m.liked?'rgba(225,48,108,0.3)':'var(--color-border)'}; border-radius:20px; padding:5px 14px; font-size:13px; cursor:pointer; color:${m.liked?'var(--color-accent)':'var(--color-sub)'}; display:flex; align-items:center; gap:4px;">
-                    <span style="animation:${m.liked?'heartBeat .6s ease':'none'};">${m.liked?'❤️':'🤍'}</span>
-                    ${m.liked?'已喜歡':'喜歡'}
-                  </button>`
-                : `<div style="font-size:12px; color: rgba(255,255,255,0.45); padding:6px 10px; border-radius:12px; border:1px solid rgba(255,255,255,0.08); background: rgba(255,255,255,0.03);">🔒 內容尚未公開</div>`
+            <div style="display:flex; flex-direction:column; gap:6px; margin-top:12px;">
+              <div style="display:flex; justify-content:flex-end;">
+                ${m.status==='public'
+                  ? `<button onclick="toggleLike('${m.id}')" style="background:${m.liked?'rgba(225,48,108,0.15)':'transparent'}; border:1px solid ${m.liked?'rgba(225,48,108,0.3)':'var(--color-border)'}; border-radius:20px; padding:5px 14px; font-size:13px; cursor:pointer; color:${m.liked?'var(--color-accent)':'var(--color-sub)'}; display:flex; align-items:center; gap:4px;">
+                      <span style="animation:${m.liked?'heartBeat .6s ease':'none'};">${m.liked?'❤️':'🤍'}</span>
+                      ${m.liked?'已喜歡':'喜歡'}
+                    </button>`
+                  : `<div style="font-size:12px; color: rgba(255,255,255,0.45); padding:6px 10px; border-radius:12px; border:1px solid rgba(255,255,255,0.08); background: rgba(255,255,255,0.03);">🔒 內容尚未公開</div>`
+                }
+              </div>
+              ${m.isAdminPost && m.status==='public'
+                ? `<div>
+                    <button style="background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.12); border-radius:999px; padding:5px 12px; font-size:12px; color:rgba(255,255,255,0.75); cursor:pointer;" onclick="togglePublicReplyBox('${m.id}')">💬 回覆這則貼文</button>
+                    <div id="public-reply-box-${m.id}" style="margin-top:6px; display:none;">
+                      <input id="public-reply-alias-${m.id}" placeholder="你的暱稱（可不填）" maxlength="16" style="width:100%; padding:8px 10px; border-radius:8px; border:1px solid rgba(255,255,255,0.12); background:rgba(255,255,255,0.03); color:var(--color-text); font-size:12px; margin-bottom:6px;"/>
+                      <textarea id="public-reply-text-${m.id}" placeholder="寫下你對這則貼文的回覆..." maxlength="500" style="width:100%; min-height:70px; border-radius:8px; border:1px solid rgba(255,255,255,0.12); background:rgba(255,255,255,0.04); color:var(--color-text); padding:8px 10px; font-size:13px;"></textarea>
+                      <div style="display:flex; gap:8px; margin-top:6px; justify-content:flex-end;">
+                        <button class="action-btn" style="flex:0 0 auto; min-width:70px; padding:6px 10px; font-size:12px;" onclick="togglePublicReplyBox('${m.id}')">取消</button>
+                        <button class="action-btn primary" style="flex:0 0 auto; min-width:90px; padding:6px 10px; font-size:12px;" onclick="submitPublicReply('${m.id}')">送出回覆</button>
+                      </div>
+                    </div>
+                  </div>`
+                : ''
               }
             </div>
             `}
@@ -1244,6 +1296,10 @@ function renderAdminPanel(){
           <label>貼文內容</label>
           <textarea id="admin-post-text" placeholder="寫點現在想跟大家說的話..." maxlength="500"></textarea>
         </div>
+        <div class="field">
+          <label>媒體連結（圖片 / 影片 / 音檔 URL，可選填）</label>
+          <input id="admin-post-media" placeholder="例如：https://...jpg / https://...mp4 / https://...mp3" />
+        </div>
         <div style="display:flex; gap:8px; margin-top:8px; justify-content:flex-end;">
           <button class="action-btn primary" style="flex:0 0 auto; min-width:140px;" onclick="submitAdminPost()">📣 發佈貼文</button>
         </div>
@@ -1312,7 +1368,7 @@ async function submitReply(id){
     const res = await fetch(`/api/messages/${encodeURIComponent(id)}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-      body: JSON.stringify({ replyText: text })
+      body: JSON.stringify({ replyText: text, replyFromAdmin: true })
     });
     if (!res.ok) throw new Error('reply failed');
     const updated = await res.json();
@@ -1330,9 +1386,54 @@ async function submitReply(id){
   }
 }
 
+function togglePublicReplyBox(id){
+  const box = document.getElementById(`public-reply-box-${id}`);
+  if (!box) return;
+  const cur = box.style.display || 'none';
+  box.style.display = cur === 'none' ? 'block' : 'none';
+}
+
+async function submitPublicReply(id){
+  const textEl = document.getElementById(`public-reply-text-${id}`);
+  const aliasEl = document.getElementById(`public-reply-alias-${id}`);
+  if (!textEl) return;
+  const text = textEl.value.trim();
+  if (!text){
+    showToast("⚠️ 回覆不能空白","danger");
+    return;
+  }
+  const alias = (aliasEl?.value || '').trim().slice(0, 16);
+  try{
+    const res = await fetch(`/api/messages/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: JSON.stringify({
+        replyText: text,
+        replyFromAdmin: false,
+        replyAlias: alias || genAlias()
+      })
+    });
+    if (!res.ok) throw new Error('public reply failed');
+    const updated = await res.json();
+    messages = messages.map(m => m.id === updated.id ? {
+      ...updated,
+      replies: Array.isArray(updated.replies) ? updated.replies : []
+    } : m);
+    textEl.value = '';
+    if (aliasEl) aliasEl.value = '';
+    togglePublicReplyBox(id);
+    render();
+    showToast("✅ 已送出回覆");
+  }catch(e){
+    console.error(e);
+    showToast("⚠️ 回覆失敗，請稍後再試","danger");
+  }
+}
+
 async function submitAdminPost(){
   if (!isAdmin) { showToast("⚠️ 只有管理員可以發文","danger"); return; }
   const el = document.getElementById('admin-post-text');
+  const mediaEl = document.getElementById('admin-post-media');
   if (!el) return;
   const text = el.value.trim();
   if (!text){
@@ -1343,6 +1444,7 @@ async function submitAdminPost(){
     text,
     mood: '📣',
     alias: promoSettings.displayName || 'Miiduoa',
+    mediaUrl: mediaEl ? mediaEl.value.trim() : '',
     adminPost: true
   };
   try{

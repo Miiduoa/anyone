@@ -89,11 +89,14 @@ app.get('/api/messages', (req, res) => {
 
 // Create new message (anonymous or admin post)
 app.post('/api/messages', (req, res) => {
-  const { text, mood, alias, adminPost } = req.body || {};
+  const { text, mood, alias, adminPost, mediaUrl } = req.body || {};
   const cleanText = String(text || '').trim().slice(0, 500);
   const cleanAlias = String(alias || '').trim().slice(0, 16);
   const isAdminPost = !!adminPost;
   const cleanMood = String(mood || (isAdminPost ? '📣' : '💬'));
+  const cleanMediaUrl = typeof mediaUrl === 'string'
+    ? mediaUrl.trim().slice(0, 500)
+    : '';
 
   if (!cleanText) {
     return res.status(400).json({ error: 'text is required' });
@@ -114,7 +117,8 @@ app.post('/api/messages', (req, res) => {
     pinned: false,
     editKey: nanoid(12),
     isAdminPost,
-    replies: []
+    replies: [],
+    mediaUrl: isAdminPost && cleanMediaUrl ? cleanMediaUrl : null
   };
 
   messages.unshift(msg);
