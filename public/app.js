@@ -1030,24 +1030,24 @@ function renderWallPage(){
             </div>
 
             ${isAdmin ? `
-            <div style="display:flex; gap:6px; margin-top:14px; flex-wrap:wrap;">
-              <button onclick="setStatus('${m.id}','public')" style="flex:1; min-width:60px; padding:8px 0; border-radius:10px; font-size:12px; font-weight:800; background:${m.status==='public'?'rgba(46,204,113,0.2)':'rgba(46,204,113,0.12)'}; border:1px solid rgba(46,204,113,0.25); color: var(--color-ok); cursor:pointer;">
+            <div class="wall-admin-actions">
+              <button onclick="setStatus('${m.id}','public')" class="wall-action-btn" style="background:${m.status==='public'?'rgba(46,204,113,0.2)':'rgba(46,204,113,0.12)'}; border:1px solid rgba(46,204,113,0.25); color: var(--color-ok);">
                 ${m.status==='public'?'✓ 已公開':'👁 公開'}
               </button>
-              <button onclick="setStatus('${m.id}','hidden')" style="flex:1; min-width:60px; padding:8px 0; border-radius:10px; font-size:12px; font-weight:800; background:${m.status==='hidden'?'rgba(231,76,60,0.2)':'rgba(231,76,60,0.12)'}; border:1px solid rgba(231,76,60,0.25); color: var(--color-no); cursor:pointer;">
+              <button onclick="setStatus('${m.id}','hidden')" class="wall-action-btn" style="background:${m.status==='hidden'?'rgba(231,76,60,0.2)':'rgba(231,76,60,0.12)'}; border:1px solid rgba(231,76,60,0.25); color: var(--color-no);">
                 ${m.status==='hidden'?'✓ 已隱藏':'🙈 隱藏'}
               </button>
-              <button onclick="togglePin('${m.id}')" style="flex:1; min-width:60px; padding:8px 0; border-radius:10px; font-size:12px; font-weight:800; background:${m.pinned?'rgba(225,48,108,0.12)':'rgba(255,255,255,0.04)'}; border:1px solid ${m.pinned?'rgba(225,48,108,0.25)':'var(--color-border)'}; color:${m.pinned?'var(--color-accent)':'var(--color-sub)'}; cursor:pointer;">
+              <button onclick="togglePin('${m.id}')" class="wall-action-btn" style="background:${m.pinned?'rgba(225,48,108,0.12)':'rgba(255,255,255,0.04)'}; border:1px solid ${m.pinned?'rgba(225,48,108,0.25)':'var(--color-border)'}; color:${m.pinned?'var(--color-accent)':'var(--color-sub)'};">
                 ${m.pinned?'📌 取消':'📌 置頂'}
               </button>
-              <button onclick="toggleReplyBox('${m.id}')" style="flex:1; min-width:60px; padding:8px 0; border-radius:10px; font-size:12px; font-weight:800; background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.12); color:rgba(255,255,255,0.8); cursor:pointer;">
+              <button onclick="toggleReplyBox('${m.id}')" class="wall-action-btn wall-action-neutral">
                 💬 回覆
               </button>
-              <button onclick="deleteMsg('${m.id}')" style="padding:8px 14px; border-radius:10px; font-size:12px; background: rgba(231,76,60,0.08); border:1px solid rgba(231,76,60,0.15); color: rgba(231,76,60,0.7); cursor:pointer;">🗑</button>
+              <button onclick="deleteMsg('${m.id}')" class="wall-delete-btn">🗑</button>
             </div>
-            <div id="reply-box-${m.id}" style="margin-top:8px; display:none;">
-              <textarea id="reply-text-${m.id}" placeholder="回覆這則匿名留言..." maxlength="500" style="width:100%; min-height:80px; border-radius:10px; border:1px solid rgba(255,255,255,0.12); background:rgba(255,255,255,0.04); color:var(--color-text); padding:10px; font-size:13px;"></textarea>
-              <div style="display:flex; gap:8px; margin-top:6px; justify-content:flex-end;">
+            <div id="reply-box-${m.id}" class="reply-box">
+              <textarea id="reply-text-${m.id}" placeholder="回覆這則匿名留言..." maxlength="500" class="reply-textarea"></textarea>
+              <div class="reply-action-row">
                 <button class="action-btn" style="flex:0 0 auto; min-width:80px; padding:6px 10px; font-size:12px;" onclick="toggleReplyBox('${m.id}')">取消</button>
                 <button class="action-btn primary" style="flex:0 0 auto; min-width:100px; padding:6px 10px; font-size:12px;" onclick="submitReply('${m.id}')">送出回覆</button>
               </div>
@@ -1065,11 +1065,11 @@ function renderWallPage(){
               </div>
               ${(m.status==='public')
                 ? `<div>
-                    <button style="background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.12); border-radius:999px; padding:5px 12px; font-size:12px; color:rgba(255,255,255,0.75); cursor:pointer;" onclick="togglePublicReplyBox('${m.id}')">💬 回覆這則訊息</button>
+                    <button class="public-reply-toggle" onclick="togglePublicReplyBox('${m.id}')">💬 回覆這則訊息</button>
                     <div id="public-reply-box-${m.id}" style="margin-top:6px; display:none;">
-                      <input id="public-reply-alias-${m.id}" placeholder="你的暱稱（可不填）" maxlength="16" style="width:100%; padding:8px 10px; border-radius:8px; border:1px solid rgba(255,255,255,0.12); background:rgba(255,255,255,0.03); color:var(--color-text); font-size:12px; margin-bottom:6px;"/>
-                      <textarea id="public-reply-text-${m.id}" placeholder="寫下你對這則訊息的回覆..." maxlength="500" style="width:100%; min-height:70px; border-radius:8px; border:1px solid rgba(255,255,255,0.12); background:rgba(255,255,255,0.04); color:var(--color-text); padding:8px 10px; font-size:13px;"></textarea>
-                      <div style="display:flex; gap:8px; margin-top:6px; justify-content:flex-end;">
+                      <input id="public-reply-alias-${m.id}" placeholder="你的暱稱（可不填）" maxlength="16" class="public-reply-input"/>
+                      <textarea id="public-reply-text-${m.id}" placeholder="寫下你對這則訊息的回覆..." maxlength="500" class="public-reply-textarea"></textarea>
+                      <div class="reply-action-row">
                         <button class="action-btn" style="flex:0 0 auto; min-width:70px; padding:6px 10px; font-size:12px;" onclick="togglePublicReplyBox('${m.id}')">取消</button>
                         <button class="action-btn primary" style="flex:0 0 auto; min-width:90px; padding:6px 10px; font-size:12px;" onclick="submitPublicReply('${m.id}')">送出回覆</button>
                       </div>
