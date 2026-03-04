@@ -587,6 +587,11 @@ function setStoryStyle(style){
   const glassBtn = document.getElementById('story-style-glass');
   if (metalBtn) metalBtn.style.opacity = promoSettings.storyStyle === 'metal' ? '1' : '0.7';
   if (glassBtn) glassBtn.style.opacity = promoSettings.storyStyle === 'glass' ? '1' : '0.7';
+  const liveCard = document.getElementById('story-live-card');
+  if (liveCard) {
+    liveCard.classList.toggle('metal', promoSettings.storyStyle === 'metal');
+    liveCard.classList.toggle('glass', promoSettings.storyStyle === 'glass');
+  }
 }
 
 function syncStoryImageControls(){
@@ -615,9 +620,24 @@ function syncStoryImageControls(){
   }
 }
 
+function updateStoryLivePreviewText(){
+  const name = document.getElementById('story-live-name');
+  const tag = document.getElementById('story-live-tagline');
+  const cta = document.getElementById('story-live-cta');
+  const url = document.getElementById('story-live-url');
+  const footer = document.getElementById('story-live-footer');
+  if (!name) return;
+  name.textContent = promoSettings.displayName || 'Miiduoa';
+  if (tag) tag.textContent = promoSettings.tagline || '';
+  if (cta) cta.textContent = promoSettings.cta1 || '匿名留言給我';
+  if (url) url.textContent = promoSettings.siteUrl || SITE_URL;
+  if (footer) footer.textContent = promoSettings.cta2 || '看更多內容 → IG 主頁';
+}
+
 function initStoryDesignEditor(){
   setStoryStyle(promoSettings.storyStyle || 'metal');
   syncStoryImageControls();
+  updateStoryLivePreviewText();
 
   const x = document.getElementById('ps_storyImageX');
   const y = document.getElementById('ps_storyImageY');
@@ -629,13 +649,27 @@ function initStoryDesignEditor(){
     if (serverAvatarDataUrl) {
       img.style.backgroundImage = `url(${serverAvatarDataUrl})`;
     } else {
-      img.style.backgroundImage = 'none';
+      img.style.backgroundImage = 'radial-gradient(circle at 35% 30%, rgba(255,255,255,0.2), rgba(255,255,255,0.03) 60%), linear-gradient(135deg, #833AB4, #E1306C, #F77737)';
     }
   }
 
   if (x) x.oninput = () => { promoSettings.storyImageX = Number(x.value || 0); syncStoryImageControls(); };
   if (y) y.oninput = () => { promoSettings.storyImageY = Number(y.value || 0); syncStoryImageControls(); };
   if (sc) sc.oninput = () => { promoSettings.storyImageScale = Number(sc.value || 1); syncStoryImageControls(); };
+
+  const bindTextSync = (id, key) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.oninput = () => {
+      promoSettings[key] = String(el.value || '');
+      updateStoryLivePreviewText();
+    };
+  };
+  bindTextSync('ps_displayName', 'displayName');
+  bindTextSync('ps_tagline', 'tagline');
+  bindTextSync('ps_siteUrl', 'siteUrl');
+  bindTextSync('ps_cta1', 'cta1');
+  bindTextSync('ps_cta2', 'cta2');
 
   if (!editor) return;
   let dragging = false;
@@ -705,39 +739,57 @@ async function openShareModalFor(msg, options = {}){
   const img = document.getElementById("share-preview-img");
   const video = document.getElementById("share-preview-video");
   const mainBtn = document.getElementById("share-main-btn");
+  if (!sub || !img || !video) {
+    showToast("⚠️ 名片預覽元件載入失敗，請重新整理","danger");
+    return;
+  }
 
-  sharePayload = { kind: 'promo' };
-  img.style.display = 'block';
-  video.style.display = 'none';
-  video.pause();
-  video.removeAttribute('src');
-  if (mainBtn) mainBtn.textContent = '🚀 分享名片限動';
+  try {
+    sharePayload = { kind: 'promo' };
+    img.style.display = 'block';
+    video.style.display = 'none';
+    video.pause();
+    video.removeAttribute('src');
+    if (mainBtn) mainBtn.textContent = '🚀 分享名片限動';
+    openModal("share-modal");
 
-  const mediaType = !forcePromo && msg && msg.mediaUrl ? getMediaTypeFromUrl(msg.mediaUrl) : null;
-  if (mediaType === 'image') {
-    const mediaUrl = normalizeMediaUrl(msg.mediaUrl);
-    sharePayload = { kind: 'media', mediaType: 'image', url: mediaUrl };
-    img.src = mediaUrl;
-    if (mainBtn) mainBtn.textContent = '🚀 分享圖片限動';
-    sub.textContent = '偵測到圖片，會直接分享這張圖片到限動。';
-  } else if (mediaType === 'video') {
-    const mediaUrl = normalizeMediaUrl(msg.mediaUrl);
-    sharePayload = { kind: 'media', mediaType: 'video', url: mediaUrl };
-    img.style.display = 'none';
-    video.style.display = 'block';
-    video.src = mediaUrl;
-    if (mainBtn) mainBtn.textContent = '🚀 分享影片限動';
-    sub.textContent = '偵測到影片，會直接分享這支影片到限動。建議先裁成 9:16（1080x1920）避免 IG 自動裁切重點。';
-  } else if (!forcePromo && msg) {
-    sharePayload = { kind: 'message', msg };
-    const canvas = generateMessageStoryCanvas(msg);
-    img.src = canvas.toDataURL("image/png", 0.92);
-    if (mainBtn) mainBtn.textContent = '🚀 分享這則留言限動';
-    sub.textContent = '將分享這則留言內容為主的限動圖。';
-  } else {
-    const canvas = await generatePromoStoryCanvas();
-    img.src = canvas.toDataURL("image/png", 0.92);
-    sub.textContent = promoSettings.hint || "分享到 IG 後加 Link Sticker（建議貼網站）";
+    const mediaType = !forcePromo && msg && msg.mediaUrl ? getMediaTypeFromUrl(msg.mediaUrl) : null;
+    if (mediaType === 'image') {
+      const mediaUrl = normalizeMediaUrl(msg.mediaUrl);
+      sharePayload = { kind: 'media', mediaType: 'image', url: mediaUrl };
+      img.src = mediaUrl;
+      if (mainBtn) mainBtn.textContent = '🚀 分享圖片限動';
+      sub.textContent = '偵測到圖片，會直接分享這張圖片到限動。';
+    } else if (mediaType === 'video') {
+      const mediaUrl = normalizeMediaUrl(msg.mediaUrl);
+      sharePayload = { kind: 'media', mediaType: 'video', url: mediaUrl };
+      img.style.display = 'none';
+      video.style.display = 'block';
+      video.src = mediaUrl;
+      if (mainBtn) mainBtn.textContent = '🚀 分享影片限動';
+      sub.textContent = '偵測到影片，會直接分享這支影片到限動。建議先裁成 9:16（1080x1920）避免 IG 自動裁切重點。';
+    } else if (!forcePromo && msg) {
+      sharePayload = { kind: 'message', msg };
+      const canvas = generateMessageStoryCanvas(msg);
+      img.src = canvas.toDataURL("image/png", 0.92);
+      if (mainBtn) mainBtn.textContent = '🚀 分享這則留言限動';
+      sub.textContent = '將分享這則留言內容為主的限動圖。';
+    } else {
+      const canvas = await generatePromoStoryCanvas();
+      img.src = canvas.toDataURL("image/png", 0.92);
+      sub.textContent = promoSettings.hint || "分享到 IG 後加 Link Sticker（建議貼網站）";
+    }
+  } catch (e) {
+    console.error(e);
+    const fallback = generateMessageStoryCanvas({
+      mood: '💌',
+      alias: promoSettings.displayName || 'Miiduoa',
+      text: promoSettings.cta1 || '匿名留言給我'
+    });
+    img.style.display = 'block';
+    video.style.display = 'none';
+    img.src = fallback.toDataURL("image/png", 0.92);
+    sub.textContent = "名片預覽載入失敗，已切換為備援樣式。";
   }
 
   const codebox = document.getElementById("share-codebox");
@@ -750,7 +802,6 @@ async function openShareModalFor(msg, options = {}){
     codeEl.textContent = "";
   }
 
-  openModal("share-modal");
 }
 
 function openShareModalById(id){
@@ -1242,9 +1293,12 @@ function renderWallPage(){
                   : `<div style="font-size:12px; color: rgba(255,255,255,0.45); padding:6px 10px; border-radius:12px; border:1px solid rgba(255,255,255,0.08); background: rgba(255,255,255,0.03);">🔒 內容尚未公開</div>`
                 }
               </div>
-              <div style="display:flex; justify-content:flex-end;">
-                <button class="public-reply-toggle" onclick="openShareModalById('${m.id}')">📸 分享這則</button>
-              </div>
+              ${m.status==='public'
+                ? `<div style="display:flex; justify-content:flex-end;">
+                    <button class="public-reply-toggle" onclick="openShareModalById('${m.id}')">📸 分享這則</button>
+                   </div>`
+                : ''
+              }
               ${(m.status==='public')
                 ? `<div>
                     <button class="public-reply-toggle" onclick="togglePublicReplyBox('${m.id}')">💬 回覆這則訊息</button>
@@ -1394,6 +1448,17 @@ function renderAdminPanel(){
           <div id="story-image-editor" style="position:relative; width:100%; max-width:420px; aspect-ratio:9/16; border-radius:14px; overflow:hidden; border:1px solid rgba(255,255,255,0.1); background:linear-gradient(135deg,#151519,#101014); margin-bottom:10px; touch-action:none; cursor:grab;">
             <div id="story-image-editor-photo" style="position:absolute; left:50%; top:50%; width:180%; height:180%; background-size:cover; background-position:center; transform:translate(-50%,-50%) scale(1);"></div>
             <div class="story-editor-shimmer"></div>
+            <div id="story-live-card" class="story-live-card metal">
+              <div class="story-live-header">
+                <div id="story-live-name" class="story-live-name">Miiduoa</div>
+                <div id="story-live-tagline" class="story-live-tagline"></div>
+              </div>
+              <div class="story-live-center">
+                <div id="story-live-cta" class="story-live-cta">匿名留言給我</div>
+                <div id="story-live-url" class="story-live-url"></div>
+              </div>
+              <div id="story-live-footer" class="story-live-footer">看更多內容 → IG 主頁</div>
+            </div>
             <div style="position:absolute; inset:0; border:1px solid rgba(255,255,255,0.18); pointer-events:none;"></div>
             <div style="position:absolute; left:50%; top:50%; width:44px; height:44px; transform:translate(-50%,-50%); border:1px dashed rgba(255,255,255,0.35); border-radius:999px; pointer-events:none;"></div>
           </div>
@@ -1776,7 +1841,11 @@ function drawGlassCard(ctx,x,y,w,h,r){
 async function drawStoryHeroImage(ctx, cardX, cardY, cardW, cardH, settings){
   if (!serverAvatarDataUrl) return;
   try {
-    const img = await loadImage(serverAvatarDataUrl);
+    const img = await Promise.race([
+      loadImage(serverAvatarDataUrl),
+      new Promise((resolve) => setTimeout(() => resolve(null), 1500))
+    ]);
+    if (!img) return;
     const x = Number(settings.storyImageX || 0);
     const y = Number(settings.storyImageY || 0);
     const scale = Number(settings.storyImageScale || 1);

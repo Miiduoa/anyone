@@ -172,6 +172,24 @@ function toClientMessage(msg, includeSensitive = false) {
   return base;
 }
 
+function toPublicPendingMessage(msg) {
+  // 未公開內容不對一般訪客下發原文，避免透過分享/開發者工具外洩
+  return {
+    id: msg.id,
+    alias: msg.alias,
+    text: '（此留言審核中，內容暫不公開）',
+    mood: msg.mood,
+    ts: msg.ts,
+    editedTs: msg.editedTs || 0,
+    status: msg.status,
+    liked: false,
+    pinned: false,
+    isAdminPost: !!msg.isAdminPost,
+    mediaUrl: null,
+    replies: []
+  };
+}
+
 // 基本安全標頭
 // 注意：目前前端大量使用 inline script/style 與 inline 事件（onclick）。
 // 若啟用 helmet 預設 CSP，會在 production 直接被瀏覽器阻擋，導致前端幾乎無法操作。
@@ -265,7 +283,10 @@ app.get('/api/messages', (req, res) => {
       // 前台顯示公開與待審，待審由前端以馬賽克呈現；隱藏內容仍不對外公開
       return m.status === 'public' || m.status === 'pending';
     })
-    .map(m => toClientMessage(m, false));
+    .map(m => {
+      if (!isAdmin && m.status === 'pending') return toPublicPendingMessage(m);
+      return toClientMessage(m, false);
+    });
   res.json(msgs);
 });
 
