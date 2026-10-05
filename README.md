@@ -1,89 +1,91 @@
-## Miiduoa 匿名留言牆
+# Anyone｜Anonymous Feedback Service
 
-簡單的 Express + 靜態前端專案，用來接收與管理「想對 Miiduoa 說什麼」的匿名留言。
+一個小型 Express 匿名留言服務，重點放在「匿名內容可以投稿，但管理權限與未公開內容不能一起被放出去」。
 
-### 安裝與啟動
+## 主要流程
+
+```text
+anonymous message
+      ↓
+pending state
+      ↓
+public response redacts pending content
+      ↓
+admin moderation
+      ↓
+public / hidden
+```
+
+管理操作使用短期 token；token 綁定 request IP 與 User-Agent。
+
+## Security decisions
+
+- `helmet` 提供常見 HTTP security headers。
+- admin login 與 anonymous submit 各自 rate limit。
+- production 啟動時 **必須設定 `CORS_ORIGINS`**，不再因漏設定而自動允許所有瀏覽器來源。
+- admin password comparison 使用 Node `crypto.timingSafeEqual` 的固定長度 digest。
+- session / message IDs 使用 `crypto.randomBytes`，不依賴額外 token library。
+- hidden message 不對一般訪客下發。
+- pending message 對一般訪客只回傳 placeholder，不回原文。
+- anonymous author 只能持有正確 `editKey` 時修改自己的文字。
+- 管理欄位需要 admin token。
+- media upload 有 MIME 類型與檔案大小限制。
+
+## 執行
 
 ```bash
-npm install
+npm ci
 
-# 開發模式（本機使用，CORS 較寬鬆）
+# development
 npm run dev
 
-# 正式模式（建議設定 NODE_ENV=production）
-NODE_ENV=production ADMIN_PASSWORD="一組很長很難猜的密碼" CORS_ORIGINS="https://你的正式網域" node server.js
-```
-
-### 必要環境變數
-
-- **ADMIN_PASSWORD**：管理後台登入密碼（只存在伺服器記憶體，不寫入硬碟）。  
-  - 建議長度至少 16 碼亂數字元，請透過雲端 Secret / `.env` 管理，不要 commit。
-- **CORS_ORIGINS**：允許前端呼叫 API 的網域清單，逗號分隔，例如：
-  - `https://miiduoa.com,https://www.miiduoa.com`
-  - 若未設定、且非 production 環境，後端會允許所有 Origin，方便本機開發。
-
-### 安全說明（重點）
-
-- 使用 `helmet` 套件加入常見 HTTP 安全標頭。  
-- 使用 `express-rate-limit`：
-  - 管理員登入有暴力破解防護。
-  - 匿名留言 API 有速率限制，降低被刷爆風險。
-- 所有留言文字、暱稱、回覆在前端渲染前都會經過 HTML escape，降低 XSS 風險。
-- 管理員登入成功後會得到一組隨機 Token：
-  - Token 僅存在伺服器記憶體，不寫入 Cookie。
-  - Token 與請求的 IP、User-Agent 綁定，不同來源將被拒絕。
-- 媒體上傳（圖片 / 影片 / 音檔）僅限管理員：
-  - 僅接受 `image/*`、`video/*`、`audio/*` MIME。
-  - 副檔名會套用白名單或根據 MIME 改成安全副檔名。
-  - 檔案預設上限為 25MB。
-
-## 想對 Miiduoa 說什麼－後端說明
-
-這個專案現在有一個簡單的 Node.js/Express 後端，提供留言的 REST API。
-
-### 安裝
-
-```bash
-cd /Volumes/外接硬碟/匿名
-npm install
-```
-
-### 啟動後端（含靜態前端）
-
-把你的 `index.html` 放在同一個資料夾（也就是這個專案根目錄），然後：
-
-```bash
+# production
+NODE_ENV=production \
+ADMIN_PASSWORD="use-a-long-random-secret" \
+CORS_ORIGINS="https://example.com" \
 npm start
 ```
 
-預設會在 `http://localhost:3000` 提供：
+## Tests
 
-- `/`：靜態前端（你的 HTML）
-- `/api/messages`：留言 API
-- `/api/stats`：統計 API
+```bash
+npm test
+```
 
-### API 一覽
+目前 CI 先驗證不需要啟動 server 的 security primitives：
 
-- `GET /api/messages`  
-  取得所有留言（陣列）
+- secret comparison
+- random token length / uniqueness
+- development CORS behavior
+- production origin whitelist
+- non-browser request behavior
 
-- `POST /api/messages`  
-  Body：`{ text, mood, alias }`  
-  回傳建立好的留言物件（含 `id`、`editKey` 等欄位）
+另外會跑：
 
-- `PATCH /api/messages/:id`  
-  Body 可帶任意要更新的欄位：
-  - `status`: `"public" | "pending" | "hidden"`
-  - `pinned`: `boolean`
-  - `liked`: `boolean`
-  - `text`: `string`（會順便更新 `editedTs`）
-  - `alias`: `string`
+```bash
+node --check server.js
+```
 
-- `DELETE /api/messages/:id`  
-  刪除指定留言
+確保 server entrypoint 至少能被 Node parser 正確解析。
 
-- `GET /api/stats`  
-  回傳 `{ total, pub, pending, hidden }`
+## Storage
 
-資料會存成 `data/messages.json` 檔案，方便你備份或搬移。
+目前 message / settings 使用本機 JSON files：
 
+```text
+data/messages.json
+data/settings.json
+data/media/
+```
+
+這讓原型很容易搬移，但正式多 instance 部署會有一致性問題；如果要水平擴展，應換成 shared database / object storage。
+
+## Known limitations
+
+- admin sessions 在 process memory，重啟後失效。
+- JSON file persistence 不適合多 instance。
+- CSP 目前因舊前端仍包含 inline script/style 而關閉；這是明確的待改善安全債。
+- IP + User-Agent binding 是額外 session constraint，不應被視為完整裝置認證。
+- 目前測試聚焦 security helpers，HTTP route integration coverage 還不完整。
+
+這個 repo 的重點不是做一個「匿名牆 UI」，而是把 moderation boundary、pending-content privacy 與 deployment security 做清楚。
