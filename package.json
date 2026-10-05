@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node server.js",
     "dev": "NODE_ENV=development node server.js",
-    "test": "node --test"
+    "test": "node --test",
+    "check": "node --check server.js && node --test"
   },
   "dependencies": {
     "cors": "^2.8.5",
