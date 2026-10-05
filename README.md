@@ -1,4 +1,4 @@
-# anyone
+# Anonymous Feedback Security Lab
 
 [![ci](https://github.com/Miiduoa/anyone/actions/workflows/ci.yml/badge.svg)](https://github.com/Miiduoa/anyone/actions/workflows/ci.yml)
 
@@ -18,6 +18,27 @@
 - 管理員才能改公開狀態、置頂、刪除與上傳媒體
 - 核心 policy 用 Node.js built-in test runner 測試
 - GitHub Actions 會跑 syntax check + tests
+
+## Threat model
+
+這個版本主要處理幾個明確風險：
+
+- **重複送出**：行動網路 timeout / retry 不應產生兩筆留言。
+- **未審核內容外洩**：pending 原文不能因為前端隱藏方式不完整而被 API 直接讀走。
+- **管理端暴力嘗試**：登入端點需要獨立 rate limit。
+- **跨站呼叫**：production 僅允許明確設定的 browser origins。
+- **審核紀錄過度蒐集**：audit trail 不複製留言正文、IP 或 User-Agent。
+- **管理 session 被直接重用**：session 有時效，並綁定建立時的 IP + User-Agent。
+
+目前沒有宣稱可以抵抗：
+
+- 多 instance / distributed session consistency
+- DDoS
+- malware scanning
+- 真正的匿名網路層保護
+- database-level transaction / row locking
+
+所以它是一個 security-conscious 單機服務，不是完整匿名通訊平台。
 
 ## API 重點
 
