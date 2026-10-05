@@ -6,7 +6,7 @@ const morgan = require('morgan');
 const multer = require('multer');
 const rateLimit = require('express-rate-limit');
 const helmet = require('helmet');
-const { nanoid } = require('nanoid');
+const { secureEqual, randomToken, isOriginAllowed } = require('./security');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -103,15 +103,6 @@ function writeSettings(settings) {
   fs.writeFileSync(SETTINGS_FILE, JSON.stringify(next, null, 2), 'utf8');
 }
 
-function safeEqual(a, b) {
-  if (a.length !== b.length) return false;
-  let res = 0;
-  for (let i = 0; i < a.length; i++) {
-    res |= a.charCodeAt(i) ^ b.charCodeAt(i);
-  }
-  return res === 0;
-}
-
 function requireAdminToken(req, res) {
   const token = req.headers['x-admin-token'];
   if (!token) {
@@ -203,18 +194,24 @@ const ALLOWED_ORIGINS = (process.env.CORS_ORIGINS || '')
   .map(o => o.trim())
   .filter(Boolean);
 
+if (IS_PROD && ALLOWED_ORIGINS.length === 0) {
+  throw new Error(
+    'CORS_ORIGINS is required when NODE_ENV=production'
+  );
+}
+
 app.use(cors({
   origin: (origin, callback) => {
-    // 非瀏覽器（如 cURL / Postman）沒有 origin，直接允許
-    if (!origin) return callback(null, true);
-    // 若未設定白名單，預設允許所有，避免部署時因漏設 CORS_ORIGINS 而整站 API 故障
-    if (ALLOWED_ORIGINS.length === 0) {
+    if (
+      isOriginAllowed(
+        origin,
+        ALLOWED_ORIGINS,
+        IS_PROD
+      )
+    ) {
       return callback(null, true);
     }
-    // 有設定白名單時，必須在白名單內才允許
-    if (ALLOWED_ORIGINS.includes(origin)) {
-      return callback(null, true);
-    }
+
     return callback(new Error('Not allowed by CORS'));
   },
   allowedHeaders: ['Content-Type', 'x-admin-token']
@@ -255,7 +252,7 @@ const storage = multer.diskStorage({
       // 如果副檔名不在白名單內，根據 mimetype 給予一個安全的預設
       ext = pickSafeExt(file);
     }
-    const id = nanoid(16);
+    const id = randomToken(16);
     cb(null, ext ? `${id}${ext}` : id);
   }
 });
@@ -312,12 +309,12 @@ app.post('/api/admin/login', adminLoginLimiter, (req, res) => {
   const body = req.body || {};
   const password = String(body.password || '');
 
-  const ok = safeEqual(ADMIN_PASSWORD, password);
+  const ok = secureEqual(ADMIN_PASSWORD, password);
   if (!ok) {
     return res.status(401).json({ error: 'invalid_credentials' });
   }
 
-  const token = nanoid(32);
+  const token = randomToken(32);
   const now = Date.now();
   adminSessions.set(token, {
     createdAt: now,
@@ -357,7 +354,7 @@ app.post('/api/messages', createMessageLimiter, (req, res) => {
   }
 
   const msg = {
-    id: nanoid(16),
+    id: randomToken(16),
     alias: cleanAlias || (isAdminPost ? 'Miiduoa' : `匿名${Math.random().toString(36).slice(2, 6)}`),
     text: cleanText,
     mood: cleanMood,
@@ -366,7 +363,7 @@ app.post('/api/messages', createMessageLimiter, (req, res) => {
     status: isAdminPost ? 'public' : 'pending',
     liked: false,
     pinned: false,
-    editKey: nanoid(12),
+    editKey: randomToken(12),
     isAdminPost,
     replies: [],
     mediaUrl: isAdminPost && cleanMediaUrl ? cleanMediaUrl : null
@@ -445,7 +442,7 @@ app.patch('/api/messages/:id', (req, res) => {
         ? body.replyAlias.trim().slice(0, 16)
         : '';
       const reply = {
-        id: nanoid(12),
+        id: randomToken(12),
         text: replyText,
         ts: Date.now(),
         fromAdmin
