@@ -1,91 +1,95 @@
-# Anyone｜Anonymous Feedback Service
+# anyone
 
-一個小型 Express 匿名留言服務，重點放在「匿名內容可以投稿，但管理權限與未公開內容不能一起被放出去」。
+[![ci](https://github.com/Miiduoa/anyone/actions/workflows/ci.yml/badge.svg)](https://github.com/Miiduoa/anyone/actions/workflows/ci.yml)
 
-## 主要流程
+匿名留言牆，但重點不是「能留言」而已。
+
+這個專案把匿名回饋常見的幾個後端問題一起處理：審核流程、重複送出、管理員操作紀錄、速率限制、敏感內容不外洩，以及媒體上傳邊界。
+
+## 這版做了什麼
+
+- 匿名留言預設進 `pending`，未審核原文不會直接下發給一般訪客
+- `Idempotency-Key` 防止手機網路重送造成重複留言
+- 管理操作寫入 append-only JSONL audit trail
+- audit 只記 action / message id / 狀態，不複製留言內容或 IP
+- 管理員 session 綁定 IP + User-Agent，並有登入 rate limit
+- 匿名送出 API 有獨立 rate limit
+- CORS allowlist、Helmet、安全媒體副檔名處理
+- 管理員才能改公開狀態、置頂、刪除與上傳媒體
+- 核心 policy 用 Node.js built-in test runner 測試
+- GitHub Actions 會跑 syntax check + tests
+
+## API 重點
 
 ```text
-anonymous message
-      ↓
-pending state
-      ↓
-public response redacts pending content
-      ↓
-admin moderation
-      ↓
-public / hidden
+POST   /api/messages
+GET    /api/messages
+GET    /api/messages/:id
+PATCH  /api/messages/:id
+DELETE /api/messages/:id
+
+POST   /api/admin/login
+POST   /api/admin/logout
+GET    /api/admin/audit
+
+GET    /api/stats
+POST   /api/upload-media
 ```
 
-管理操作使用短期 token；token 綁定 request IP 與 User-Agent。
+### Idempotent create
 
-## Security decisions
+同一次送出可以帶一個 8–128 字元的 `Idempotency-Key`：
 
-- `helmet` 提供常見 HTTP security headers。
-- admin login 與 anonymous submit 各自 rate limit。
-- production 啟動時 **必須設定 `CORS_ORIGINS`**，不再因漏設定而自動允許所有瀏覽器來源。
-- admin password comparison 使用 Node `crypto.timingSafeEqual` 的固定長度 digest。
-- session / message IDs 使用 `crypto.randomBytes`，不依賴額外 token library。
-- hidden message 不對一般訪客下發。
-- pending message 對一般訪客只回傳 placeholder，不回原文。
-- anonymous author 只能持有正確 `editKey` 時修改自己的文字。
-- 管理欄位需要 admin token。
-- media upload 有 MIME 類型與檔案大小限制。
+```http
+POST /api/messages
+Idempotency-Key: device-20261005-0001
+Content-Type: application/json
 
-## 執行
+{"text":"這是一則匿名留言"}
+```
+
+如果前端因 timeout 重送同一個 key，後端會回傳原本建立的訊息，不再新增第二筆。
+
+## Moderation audit
+
+`data/moderation-audit.jsonl` 每行是一個操作事件，例如：
+
+```json
+{"ts":1791194400000,"action":"status_changed","messageId":"abc123","detail":{"fromStatus":"pending","toStatus":"public"}}
+```
+
+刻意不把留言文字、IP、User-Agent 寫進 audit，因為審核紀錄需要可追蹤，但不代表應該多留一份敏感資料。
+
+## Local run
 
 ```bash
 npm ci
 
-# development
-npm run dev
-
-# production
-NODE_ENV=production \
-ADMIN_PASSWORD="use-a-long-random-secret" \
-CORS_ORIGINS="https://example.com" \
+ADMIN_PASSWORD="use-a-long-random-password" \
+CORS_ORIGINS="http://localhost:3000" \
+NODE_ENV=development \
 npm start
 ```
 
-## Tests
+正式環境必須設定 `CORS_ORIGINS`。
+
+## Test
 
 ```bash
-npm test
+npm run check
 ```
 
-目前 CI 先驗證不需要啟動 server 的 security primitives：
+目前 CI 會執行：
 
-- secret comparison
-- random token length / uniqueness
-- development CORS behavior
-- production origin whitelist
-- non-browser request behavior
+- `node --check server.js`
+- `node --test`
 
-另外會跑：
+## Storage trade-off
 
-```bash
-node --check server.js
-```
+現在仍使用本機 JSON / JSONL 檔案，方便單機部署與備份。這代表它不適合多 instance 同時寫入。
 
-確保 server entrypoint 至少能被 Node parser 正確解析。
+如果要再往 production 走，下一步會把 message store、idempotency record 與 audit log 拆到交易型資料庫，而不是先把目前的單機版本包裝成「可水平擴充」。
 
-## Storage
+## License
 
-目前 message / settings 使用本機 JSON files：
-
-```text
-data/messages.json
-data/settings.json
-data/media/
-```
-
-這讓原型很容易搬移，但正式多 instance 部署會有一致性問題；如果要水平擴展，應換成 shared database / object storage。
-
-## Known limitations
-
-- admin sessions 在 process memory，重啟後失效。
-- JSON file persistence 不適合多 instance。
-- CSP 目前因舊前端仍包含 inline script/style 而關閉；這是明確的待改善安全債。
-- IP + User-Agent binding 是額外 session constraint，不應被視為完整裝置認證。
-- 目前測試聚焦 security helpers，HTTP route integration coverage 還不完整。
-
-這個 repo 的重點不是做一個「匿名牆 UI」，而是把 moderation boundary、pending-content privacy 與 deployment security 做清楚。
+MIT
