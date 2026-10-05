@@ -1,4 +1,4 @@
-# Anonymous Feedback Security Lab
+# anyone｜Anonymous Feedback Service
 
 [![ci](https://github.com/Miiduoa/anyone/actions/workflows/ci.yml/badge.svg)](https://github.com/Miiduoa/anyone/actions/workflows/ci.yml)
 
