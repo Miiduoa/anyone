@@ -7,6 +7,12 @@ const multer = require('multer');
 const rateLimit = require('express-rate-limit');
 const helmet = require('helmet');
 const { secureEqual, randomToken, isOriginAllowed } = require('./security');
+const {
+  normalizeMessageInput,
+  normalizeIdempotencyKey,
+  hashOpaqueKey,
+  createAuditEvent
+} = require('./message-policy');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -15,6 +21,7 @@ const IS_PROD = process.env.NODE_ENV === 'production';
 const DATA_DIR = path.join(__dirname, 'data');
 const MSG_FILE = path.join(DATA_DIR, 'messages.json');
 const SETTINGS_FILE = path.join(DATA_DIR, 'settings.json');
+const AUDIT_FILE = path.join(DATA_DIR, 'moderation-audit.jsonl');
 const MEDIA_DIR = path.join(DATA_DIR, 'media');
 const PUBLIC_DIR = path.join(__dirname, 'public');
 
@@ -32,8 +39,8 @@ const adminLoginLimiter = rateLimit({
 
 // 匿名留言 API 速率限制（避免被濫刷）
 const createMessageLimiter = rateLimit({
-  windowMs: 60 * 1000, // 1 分鐘視窗
-  max: 60, // 同一 IP 每分鐘最多 60 則
+  windowMs: 60 * 1000,
+  max: 12,
   standardHeaders: true,
   legacyHeaders: false
 });
@@ -58,6 +65,23 @@ function readMessages() {
 
 function writeMessages(messages) {
   fs.writeFileSync(MSG_FILE, JSON.stringify(messages, null, 2), 'utf8');
+}
+
+function appendAuditEvent(event) {
+  fs.appendFileSync(AUDIT_FILE, JSON.stringify(event) + '\n', 'utf8');
+}
+
+function readAuditEvents(limit = 100) {
+  try {
+    return fs.readFileSync(AUDIT_FILE, 'utf8')
+      .split('\n')
+      .filter(Boolean)
+      .slice(-limit)
+      .reverse()
+      .map(line => JSON.parse(line));
+  } catch {
+    return [];
+  }
 }
 
 function readSettings() {
@@ -214,7 +238,7 @@ app.use(cors({
 
     return callback(new Error('Not allowed by CORS'));
   },
-  allowedHeaders: ['Content-Type', 'x-admin-token']
+  allowedHeaders: ['Content-Type', 'x-admin-token', 'Idempotency-Key']
 }));
 // 提高 JSON 限制，避免頭貼/文字太大被擋掉（預設 100kb）
 app.use(express.json({ limit: '1mb' }));
@@ -333,45 +357,51 @@ app.post('/api/admin/logout', (req, res) => {
 
 // Create new message (anonymous or admin post)
 app.post('/api/messages', createMessageLimiter, (req, res) => {
-  const { text, mood, alias, adminPost, mediaUrl } = req.body || {};
-  const cleanText = String(text || '').trim().slice(0, 500);
-  const cleanAlias = String(alias || '').trim().slice(0, 16);
-  const isAdminPost = !!adminPost;
-  const cleanMood = String(mood || (isAdminPost ? '📣' : '💬'));
-  const cleanMediaUrl = typeof mediaUrl === 'string'
-    ? mediaUrl.trim().slice(0, 500)
-    : '';
-
-  if (!cleanText) {
+  const input = normalizeMessageInput(req.body || {});
+  if (!input.text) {
     return res.status(400).json({ error: 'text is required' });
   }
 
-  const messages = readMessages();
-  const now = Date.now();
+  if (input.isAdminPost && !requireAdminToken(req, res)) return;
 
-  if (isAdminPost) {
-    if (!requireAdminToken(req, res)) return;
+  const messages = readMessages();
+  const idempotencyKey = normalizeIdempotencyKey(req.headers['idempotency-key']);
+  const idempotencyHash = idempotencyKey ? hashOpaqueKey(idempotencyKey) : '';
+
+  if (idempotencyHash) {
+    const existing = messages.find(m => m.idempotencyHash === idempotencyHash);
+    if (existing) {
+      return res.status(200).json(toClientMessage(existing, true));
+    }
   }
 
+  const now = Date.now();
   const msg = {
     id: randomToken(16),
-    alias: cleanAlias || (isAdminPost ? 'Miiduoa' : `匿名${Math.random().toString(36).slice(2, 6)}`),
-    text: cleanText,
-    mood: cleanMood,
+    alias: input.alias || (input.isAdminPost ? 'Miiduoa' : `匿名${randomToken(4)}`),
+    text: input.text,
+    mood: input.mood,
     ts: now,
     editedTs: 0,
-    status: isAdminPost ? 'public' : 'pending',
+    status: input.isAdminPost ? 'public' : 'pending',
     liked: false,
     pinned: false,
     editKey: randomToken(12),
-    isAdminPost,
+    isAdminPost: input.isAdminPost,
     replies: [],
-    mediaUrl: isAdminPost && cleanMediaUrl ? cleanMediaUrl : null
+    mediaUrl: input.mediaUrl,
+    idempotencyHash: idempotencyHash || null
   };
 
   messages.unshift(msg);
   writeMessages(messages);
-  res.status(201).json(msg);
+  appendAuditEvent(createAuditEvent(
+    input.isAdminPost ? 'admin_post_created' : 'message_created',
+    msg.id,
+    { status: msg.status, isAdminPost: input.isAdminPost },
+    now
+  ));
+  res.status(201).json(toClientMessage(msg, true));
 });
 
 // Update message (status / pin / like / content / replies)
@@ -383,6 +413,7 @@ app.patch('/api/messages/:id', (req, res) => {
   if (idx === -1) return res.status(404).json({ error: 'not found' });
 
   const msg = messages[idx];
+  const before = { status: msg.status, pinned: !!msg.pinned };
   if (!Array.isArray(msg.replies)) msg.replies = [];
 
   const wantsContentEdit =
@@ -456,6 +487,19 @@ app.patch('/api/messages/:id', (req, res) => {
 
   messages[idx] = msg;
   writeMessages(messages);
+
+  if (isAdmin && before.status !== msg.status) {
+    appendAuditEvent(createAuditEvent('status_changed', msg.id, {
+      fromStatus: before.status,
+      toStatus: msg.status
+    }));
+  }
+  if (isAdmin && before.pinned !== !!msg.pinned) {
+    appendAuditEvent(createAuditEvent('pin_changed', msg.id, {
+      pinned: !!msg.pinned
+    }));
+  }
+
   res.json(toClientMessage(msg, false));
 });
 
@@ -469,7 +513,14 @@ app.delete('/api/messages/:id', (req, res) => {
     return res.status(404).json({ error: 'not found' });
   }
   writeMessages(next);
+  appendAuditEvent(createAuditEvent('message_deleted', id));
   res.status(204).end();
+});
+
+app.get('/api/admin/audit', (req, res) => {
+  if (!requireAdminToken(req, res)) return;
+  const limit = Math.max(1, Math.min(250, Number(req.query.limit) || 100));
+  res.json(readAuditEvents(limit));
 });
 
 // Simple stats
